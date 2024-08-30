@@ -56,6 +56,8 @@ export default function createCrudOptions(
             rules: [{ required: true, message: "请选择状态" }],
             col: { span: 6 },
             order: 2,
+            // 添加这行，设置默认值为 true（启用）
+            value: true, 
           },
           dict: dict({
             data: [
