@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { getHotList } from "@/api/spider";
+// import { getHotList } from "@/api/spider";
 import { useScroll } from "@vueuse/core";
 import MIcon from "@/components/MIcon.vue";
 import { HotItemType } from "@/api/spider/types";

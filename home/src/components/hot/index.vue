@@ -52,18 +52,18 @@ const activeName = ref(tabsList[0].name);
         />
       </el-tabs>
     </template>
-    <template #reference>
-      <div class="flex items-center cursor-pointer">
-        <m-icon icon="ph:fire-fill" color="#bb0c0c" />
-        <span
-          class="text-sm font-bold"
-          :style="{
-            color,
-          }"
-          >今日热榜</span
-        >
-      </div>
-    </template>
+<!--    <template #reference>-->
+<!--      <div class="flex items-center cursor-pointer">-->
+<!--        <m-icon icon="ph:fire-fill" color="#bb0c0c" />-->
+<!--        <span-->
+<!--          class="text-sm font-bold"-->
+<!--          :style="{-->
+<!--            color,-->
+<!--          }"-->
+<!--          >今日热榜</span-->
+<!--        >-->
+<!--      </div>-->
+<!--    </template>-->
   </el-popover>
 </template>
 

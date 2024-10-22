@@ -51,22 +51,22 @@ export async function getBaiduSuggestions(query: string) {
   }));
 }
 
-/**
- *  获取每日榜单（通过故梦api）
- * @param name
- */
-export async function getHotList(name: string = "BaiduHot"): Promise<any> {
-  if (["JueJinHot", "52PoJieHot"].includes(name)) {
-    return await getHotBySpider(name);
-  }
-  const res = await getDataList(
-    `https://api.gumengya.com/Api/${name}?format=jsonp`,
-  );
-  if (res.code === 200) {
-    return res.data;
-  }
-  ElMessage.error(`${name}\t获取热搜失败`);
-}
+// /**
+//  *  获取每日榜单（通过故梦api）
+//  * @param name
+//  */
+// export async function getHotList(name: string = "BaiduHot"): Promise<any> {
+//   if (["JueJinHot", "52PoJieHot"].includes(name)) {
+//     return await getHotBySpider(name);
+//   }
+//   const res = await getDataList(
+//     `https://api.gumengya.com/Api/${name}?format=jsonp`,
+//   );
+//   if (res.code === 200) {
+//     return res.data;
+//   }
+//   ElMessage.error(`${name}\t获取热搜失败`);
+// }
 
 /**
  * 获取每日一言
@@ -79,15 +79,15 @@ export async function getYiyan(): Promise<string> {
 /**
  * 获取服务器榜单：（掘金、52pojie）
  */
-export async function getHotBySpider(name: string): Promise<any> {
-  return await request({
-    url: "/spider/hot",
-    method: "get",
-    params: {
-      name,
-    },
-  });
-}
+// export async function getHotBySpider(name: string): Promise<any> {
+//   return await request({
+//     url: "/spider/hot",
+//     method: "get",
+//     params: {
+//       name,
+//     },
+//   });
+// }
 
 /**
  * 获取和风天气数据

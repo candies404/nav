@@ -16,18 +16,18 @@ const siteStore = useSiteStore();
 <template>
   <div class="nav_container">
     <!--    左侧小组件-->
-    <div class="nav-left-container">
+    <div class="nav-left-container" title="点击收起侧边栏">
       <!--    菜单按钮-->
       <m-icon
-        size="45"
+        size="35"
         @click.stop="appStore.toggleSlide()"
         class="cursor-pointer hover:text-sky-800 transition-colors"
         icon="ph:list-fill"
       />
       <!--      今日热榜-->
-      <m-hot />
+      <!--      <m-hot />-->
       <!--      天气-->
-      <m-weather v-if="siteStore.siteInfo?.weather" />
+      <!--      <m-weather v-if="siteStore.siteInfo?.weather" />-->
     </div>
 
     <div class="nav-right-container">
