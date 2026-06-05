@@ -94,7 +94,7 @@ export default function SiteSettings() {
     } catch (error) {
       toast({
         title: "错误",
-        description: "保存失败",
+        description: error instanceof Error ? error.message : "保存失败",
         variant: "destructive",
       });
     }

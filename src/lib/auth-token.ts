@@ -1,4 +1,5 @@
 import { getToken } from 'next-auth/jwt'
+import { getAuthSecret } from '@/lib/auth-config'
 
 type RequestLike = Request | {
   headers: Headers | Record<string, string>
@@ -10,10 +11,6 @@ const AUTH_COOKIE_NAMES = [
   'next-auth.session-token',
   '__Secure-next-auth.session-token',
 ]
-
-function getAuthSecret() {
-  return process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || process.env.ADMIN_PASSWORD
-}
 
 function getHeaderValue(headers: RequestLike['headers'], name: string) {
   if (typeof (headers as Headers).get === 'function') {

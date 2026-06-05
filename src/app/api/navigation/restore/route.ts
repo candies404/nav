@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { commitFile, getFileContent } from '@/lib/storage'
+import { commitFile, getFileContent, getStorageErrorMessage } from '@/lib/storage'
 
 export const runtime = 'edge'
 
@@ -51,7 +51,7 @@ export async function POST() {
     console.error('Failed to restore navigation data:', error)
     return NextResponse.json(
       {
-        error: 'Failed to restore navigation data',
+        error: getStorageErrorMessage(error, 'Failed to restore navigation data'),
         details: (error as Error).message
       },
       { status: 500 }

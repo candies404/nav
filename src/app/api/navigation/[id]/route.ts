@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { commitFile, getFileContent } from '@/lib/storage'
+import { commitFile, getFileContent, getStorageErrorMessage } from '@/lib/storage'
 import type { NavigationData, NavigationItem } from '@/types/navigation'
 
 export const runtime = 'edge'
@@ -66,7 +66,7 @@ export async function PUT(
     return NextResponse.json(mergedItem)
   } catch (error) {
     console.error('Update error:', error)
-    return NextResponse.json({ error: 'Failed to update navigation' }, { status: 500 })
+    return NextResponse.json({ error: getStorageErrorMessage(error, 'Failed to update navigation') }, { status: 500 })
   }
 }
 
@@ -93,6 +93,6 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Delete error:', error)
-    return NextResponse.json({ error: 'Failed to delete navigation' }, { status: 500 })
+    return NextResponse.json({ error: getStorageErrorMessage(error, 'Failed to delete navigation') }, { status: 500 })
   }
 }

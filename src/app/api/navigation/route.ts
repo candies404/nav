@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { isAuthenticatedRequest } from '@/lib/auth-token'
-import { commitFile, getFileContent } from '@/lib/storage'
+import { commitFile, getFileContent, getStorageErrorMessage } from '@/lib/storage'
 import { filterNavigationData, processNavigationData } from '@/lib/data-loader'
 import type { NavigationData, NavigationDataRaw, NavigationItem } from '@/types/navigation'
 
@@ -77,7 +77,7 @@ export async function POST(request: Request) {
     console.error('Failed to save navigation data:', error)
     return NextResponse.json(
       {
-        error: 'Failed to save navigation data',
+        error: getStorageErrorMessage(error, 'Failed to save navigation data'),
         details: (error as Error).message
       },
       { status: 500 }
@@ -100,7 +100,7 @@ export async function PUT(request: Request) {
     console.error('Failed to update navigation data:', error)
     return NextResponse.json(
       {
-        error: 'Failed to update navigation data',
+        error: getStorageErrorMessage(error, 'Failed to update navigation data'),
         details: (error as Error).message
       },
       { status: 500 }

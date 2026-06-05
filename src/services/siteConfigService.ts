@@ -27,17 +27,16 @@ export class SiteConfigService {
     }
   }
 
-  async updateSiteConfig(config: SiteConfig): Promise<boolean> {
-    try {
-      const response = await fetch('/api/site', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config)
-      })
-      return response.ok
-    } catch (error) {
-      console.error('Error updating site config:', error)
-      return false
+  async updateSiteConfig(config: SiteConfig): Promise<void> {
+    const response = await fetch('/api/site', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config)
+    })
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => null)
+      throw new Error(data?.error || 'Failed to update site config')
     }
   }
 }

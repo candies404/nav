@@ -14,6 +14,9 @@ type DataCacheEntry = {
   expiresAt: number
 }
 
+const MISSING_REDIS_CONFIG_MESSAGE =
+  '未配置 UPSTASH_REDIS_REST_URL 或 UPSTASH_REDIS_REST_TOKEN。当前只能读取内置默认数据，后台保存需要先配置 Upstash Redis。'
+
 export type StoredAsset = {
   id: string
   contentType: string
@@ -26,16 +29,33 @@ const DATA_CACHE_TTL_MS = Number(process.env.NAVSPHERE_DATA_CACHE_TTL_MS || 60_0
 const DATA_ERROR_CACHE_TTL_MS = Number(process.env.NAVSPHERE_DATA_ERROR_CACHE_TTL_MS || 5_000)
 const globalCache = globalThis as typeof globalThis & {
   __navsphereDataCache?: Map<string, DataCacheEntry>
+  __navsphereRedisConfigWarned?: boolean
 }
 const dataCache = globalCache.__navsphereDataCache ?? new Map<string, DataCacheEntry>()
 globalCache.__navsphereDataCache = dataCache
+
+function warnMissingRedisConfig() {
+  if (globalCache.__navsphereRedisConfigWarned) return
+
+  globalCache.__navsphereRedisConfigWarned = true
+  console.warn(MISSING_REDIS_CONFIG_MESSAGE)
+}
+
+function isMissingRedisConfigError(error: unknown) {
+  return error instanceof Error && error.message === MISSING_REDIS_CONFIG_MESSAGE
+}
+
+export function getStorageErrorMessage(error: unknown, fallback: string) {
+  return isMissingRedisConfigError(error) ? MISSING_REDIS_CONFIG_MESSAGE : fallback
+}
 
 function getRedisConfig() {
   const url = process.env.UPSTASH_REDIS_REST_URL
   const token = process.env.UPSTASH_REDIS_REST_TOKEN
 
   if (!url || !token) {
-    throw new Error('Missing UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN')
+    warnMissingRedisConfig()
+    throw new Error(MISSING_REDIS_CONFIG_MESSAGE)
   }
 
   return { url, token }
@@ -160,7 +180,10 @@ export async function getFileContent(path: string) {
     setCachedContent(path, content)
     return cloneDefault(content)
   } catch (error) {
-    console.error('Error fetching data from Redis:', error)
+    if (!isMissingRedisConfigError(error)) {
+      console.error('Error fetching data from Redis:', error)
+    }
+
     const defaultContent = getDefaultContent(path)
     setCachedContent(path, defaultContent, DATA_ERROR_CACHE_TTL_MS)
     return defaultContent
@@ -191,6 +214,10 @@ export async function commitFile(
         key: dataKey(path),
       }
     } catch (error) {
+      if (isMissingRedisConfigError(error)) {
+        throw error
+      }
+
       if (attempt === retryCount) {
         console.error('Error saving data to Redis:', error)
         throw error

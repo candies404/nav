@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { commitFile, getFileContent } from '@/lib/storage'
+import { commitFile, getFileContent, getStorageErrorMessage } from '@/lib/storage'
 import type { NavigationData, NavigationItem } from '@/types/navigation'
 
 export const runtime = 'edge'
@@ -56,6 +56,6 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Delete category error:', error)
-    return NextResponse.json({ error: 'Failed to delete category' }, { status: 500 })
+    return NextResponse.json({ error: getStorageErrorMessage(error, 'Failed to delete category') }, { status: 500 })
   }
 }

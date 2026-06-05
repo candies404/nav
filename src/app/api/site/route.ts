@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { commitFile, getFileContent } from '@/lib/storage'
+import { commitFile, getFileContent, getStorageErrorMessage } from '@/lib/storage'
 import type { SiteInfo } from '@/types/site'
 
 export const runtime = 'edge'
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('Failed to save site data:', error)
     return NextResponse.json(
-      { error: 'Failed to save site data' },
+      { error: getStorageErrorMessage(error, 'Failed to save site data') },
       { status: 500 }
     )
   }

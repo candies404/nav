@@ -1,11 +1,12 @@
 import NextAuth from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import type { NextAuthConfig } from 'next-auth'
+import { getAdminPassword, getAuthSecret } from '@/lib/auth-config'
 
 const SESSION_MAX_AGE_SECONDS = 15 * 60
 
 // Keep the comparison work predictable for equal-length inputs; the password
-// itself only comes from the server-side ADMIN_PASSWORD environment variable.
+// comes from ADMIN_PASSWORD, falling back to the local setup default.
 function comparePassword(input: string, expected: string) {
   if (input.length !== expected.length) return false
 
@@ -28,14 +29,10 @@ const config = {
         },
       },
       async authorize(credentials) {
-        const adminPassword = process.env.ADMIN_PASSWORD
+        const adminPassword = getAdminPassword()
         const password = typeof credentials?.password === 'string'
           ? credentials.password
           : ''
-
-        if (!adminPassword) {
-          throw new Error('ADMIN_PASSWORD is not configured')
-        }
 
         if (!comparePassword(password, adminPassword)) {
           return null
@@ -59,7 +56,7 @@ const config = {
   jwt: {
     maxAge: SESSION_MAX_AGE_SECONDS,
   },
-  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || process.env.ADMIN_PASSWORD,
+  secret: getAuthSecret(),
   trustHost: true,
 } satisfies NextAuthConfig
 

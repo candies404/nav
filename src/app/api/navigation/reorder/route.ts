@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { commitFile, getFileContent } from '@/lib/storage'
+import { commitFile, getFileContent, getStorageErrorMessage } from '@/lib/storage'
 import type { NavigationData, NavigationItem } from '@/types/navigation'
 
 export const runtime = 'edge'
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('重新排序导航项错误:', error)
     return NextResponse.json({
-      error: '重新排序导航项失败',
+      error: getStorageErrorMessage(error, '重新排序导航项失败'),
       details: (error as Error).message
     }, { status: 500 })
   }

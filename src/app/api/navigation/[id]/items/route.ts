@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { commitFile, getFileContent } from '@/lib/storage'
+import { commitFile, getFileContent, getStorageErrorMessage } from '@/lib/storage'
 import type { NavigationData, NavigationItem, NavigationSubItem } from '@/types/navigation'
 
 export const runtime = 'edge'
@@ -56,7 +56,7 @@ export async function POST(
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to add item' }, { status: 500 })
+    return NextResponse.json({ error: getStorageErrorMessage(error, 'Failed to add item') }, { status: 500 })
   }
 }
 
@@ -100,7 +100,7 @@ export async function PUT(
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to update item' }, { status: 500 })
+    return NextResponse.json({ error: getStorageErrorMessage(error, 'Failed to update item') }, { status: 500 })
   }
 }
 
@@ -142,6 +142,6 @@ export async function DELETE(
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to delete item' }, { status: 500 })
+    return NextResponse.json({ error: getStorageErrorMessage(error, 'Failed to delete item') }, { status: 500 })
   }
 } 
