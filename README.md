@@ -135,9 +135,9 @@ pnpm dev
 # 后台管理密码
 ADMIN_PASSWORD=change-this-admin-password
 
-# Upstash Redis REST 配置
-UPSTASH_REDIS_REST_URL=https://your-redis-instance.upstash.io
-UPSTASH_REDIS_REST_TOKEN=your-upstash-redis-rest-token
+# Vercel KV / Upstash Redis REST 配置
+KV_REST_API_URL=https://your-redis-instance.upstash.io
+KV_REST_API_TOKEN=your-upstash-redis-rest-token
 UPSTASH_REDIS_KEY_PREFIX=navsphere
 
 # NextAuth 配置
@@ -396,7 +396,7 @@ NavSphere/
 - 检查 `AUTH_SECRET` 是否已配置
 
 **数据加载失败**
-- 验证 `UPSTASH_REDIS_REST_URL` 和 `UPSTASH_REDIS_REST_TOKEN` 是否正确
+- 验证 `KV_REST_API_URL` 和 `KV_REST_API_TOKEN` 是否正确
 - 检查 Upstash Redis 数据库是否可访问
 - 确认 Redis 中的数据格式正确；如果没有数据，系统会回退到内置 JSON 默认数据
 

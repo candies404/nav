@@ -15,7 +15,7 @@ type DataCacheEntry = {
 }
 
 const MISSING_REDIS_CONFIG_MESSAGE =
-  '未配置 UPSTASH_REDIS_REST_URL 或 UPSTASH_REDIS_REST_TOKEN。当前只能读取内置默认数据，后台保存需要先配置 Upstash Redis。'
+  '未配置 KV_REST_API_URL 或 KV_REST_API_TOKEN。当前只能读取内置默认数据，后台保存需要先在 Vercel 连接 Upstash Redis/KV。'
 
 export type StoredAsset = {
   id: string
@@ -50,8 +50,8 @@ export function getStorageErrorMessage(error: unknown, fallback: string) {
 }
 
 function getRedisConfig() {
-  const url = process.env.UPSTASH_REDIS_REST_URL
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN
+  const url = process.env.KV_REST_API_URL
+  const token = process.env.KV_REST_API_TOKEN
 
   if (!url || !token) {
     warnMissingRedisConfig()

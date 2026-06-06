@@ -135,9 +135,9 @@ Create a `.env.local` file and configure the following variables:
 # Admin password
 ADMIN_PASSWORD=change-this-admin-password
 
-# Upstash Redis REST configuration
-UPSTASH_REDIS_REST_URL=https://your-redis-instance.upstash.io
-UPSTASH_REDIS_REST_TOKEN=your-upstash-redis-rest-token
+# Vercel KV / Upstash Redis REST configuration
+KV_REST_API_URL=https://your-redis-instance.upstash.io
+KV_REST_API_TOKEN=your-upstash-redis-rest-token
 UPSTASH_REDIS_KEY_PREFIX=navsphere
 
 # NextAuth Configuration
@@ -396,7 +396,7 @@ NavSphere/
 - Check that `AUTH_SECRET` is configured
 
 **Data Loading Failure**
-- Verify that `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are correct
+- Verify that `KV_REST_API_URL` and `KV_REST_API_TOKEN` are correct
 - Check that the Upstash Redis database is reachable
 - Confirm the Redis data format is correct; if no data exists, the app falls back to bundled JSON defaults
 
