@@ -45,15 +45,14 @@ function SignInContent() {
 
       if (result?.error) {
         setError('管理密码不正确')
+        setIsLoading(false)
         return
       }
 
-      router.push(callbackUrl)
-      router.refresh()
+      router.replace(callbackUrl)
     } catch (error) {
       console.error('登录失败:', error)
       setError('登录失败，请稍后重试')
-    } finally {
       setIsLoading(false)
     }
   }
