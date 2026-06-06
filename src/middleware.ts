@@ -5,7 +5,7 @@ import type { NextRequest } from 'next/server'
 export async function middleware(request: NextRequest) {
   if (request.nextUrl.pathname.startsWith('/admin')) {
     if (!await isAuthenticatedRequest(request)) {
-      const callbackUrl = request.url
+      const callbackUrl = `${request.nextUrl.pathname}${request.nextUrl.search}`
       return NextResponse.redirect(
         new URL(`/auth/signin?callbackUrl=${encodeURIComponent(callbackUrl)}`, request.url)
       )
