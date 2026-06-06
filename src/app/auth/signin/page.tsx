@@ -15,10 +15,18 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 
+function getSafeCallbackUrl(value: string | null) {
+  if (!value || !value.startsWith('/') || value.startsWith('//')) {
+    return '/admin'
+  }
+
+  return value
+}
+
 function SignInContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const callbackUrl = searchParams?.get('callbackUrl') || '/admin'
+  const callbackUrl = getSafeCallbackUrl(searchParams?.get('callbackUrl') || null)
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
@@ -40,7 +48,7 @@ function SignInContent() {
         return
       }
 
-      router.push(result?.url || callbackUrl)
+      router.push(callbackUrl)
       router.refresh()
     } catch (error) {
       console.error('登录失败:', error)

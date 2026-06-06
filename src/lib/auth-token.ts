@@ -35,10 +35,21 @@ export async function getSessionToken(request: RequestLike) {
   if (!hasAuthSessionCookie(request)) return null
 
   try {
-    return await getToken({
-      req: request,
-      secret,
-    })
+    // HTTPS deployments may write __Secure-* cookies. The cookie name is also
+    // used as the JWT salt, so try both secure and non-secure variants.
+    for (const secureCookie of [true, false]) {
+      const token = await getToken({
+        req: request,
+        secret,
+        secureCookie,
+      })
+
+      if (token?.sub) {
+        return token
+      }
+    }
+
+    return null
   } catch (error) {
     console.error('Failed to read auth token:', error)
     return null

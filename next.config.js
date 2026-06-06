@@ -1,7 +1,28 @@
 /** @type {import('next').NextConfig} */
+const DEFAULT_SERVER_ACTION_ALLOWED_ORIGINS = ['localhost', '127.0.0.1']
+
+function normalizeAllowedOrigin(value) {
+  if (!value) return null
+
+  const trimmed = value.trim()
+  if (!trimmed) return null
+
+  try {
+    return new URL(trimmed).host
+  } catch {
+    return trimmed
+  }
+}
+
+const serverActionAllowedOrigins = Array.from(new Set([
+  ...DEFAULT_SERVER_ACTION_ALLOWED_ORIGINS,
+  process.env.AUTH_URL,
+  process.env.NEXTAUTH_URL,
+  ...(process.env.SERVER_ACTION_ALLOWED_ORIGINS || '').split(','),
+].map(normalizeAllowedOrigin).filter(Boolean)))
+
 const nextConfig = {
-  // Standalone build for Cloudflare Pages
-  // Note: Most routes use 'edge' runtime which is compatible with Cloudflare
+  // Standalone output works well for containers and self-hosted Node runtimes.
   output: 'standalone',
 
   // Don't fail build on ESLint warnings
@@ -35,10 +56,9 @@ const nextConfig = {
       }
     ]
   },
-  // Cloudflare Pages configuration
   experimental: {
     serverActions: {
-      allowedOrigins: ['localhost', 'newkit.site']
+      allowedOrigins: serverActionAllowedOrigins
     },
     optimizePackageImports: ['lucide-react', 'date-fns', 'lodash']
   }

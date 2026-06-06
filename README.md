@@ -135,15 +135,19 @@ pnpm dev
 # 后台管理密码
 ADMIN_PASSWORD=change-this-admin-password
 
-# Vercel KV / Upstash Redis REST 配置
+# Upstash Redis/KV REST 配置
 KV_REST_API_URL=https://your-redis-instance.upstash.io
 KV_REST_API_TOKEN=your-upstash-redis-rest-token
 UPSTASH_REDIS_KEY_PREFIX=navsphere
 
 # NextAuth 配置
-NEXTAUTH_URL=http://localhost:3000
+# 部署平台能正确透传 Host 时通常不需要配置 AUTH_URL/NEXTAUTH_URL。
+# 如需固定公开访问地址，可设置 AUTH_URL=https://your-domain.com，生产环境不能使用 localhost。
+# AUTH_URL=http://localhost:3000
 AUTH_SECRET=your-random-auth-secret
 NEXT_PUBLIC_API_URL=http://localhost:3000
+# 可选：Server Actions 允许的额外域名，多个用英文逗号分隔
+# SERVER_ACTION_ALLOWED_ORIGINS=example.com,www.example.com
 
 # Google Analytics 配置 (可选)
 GA_ID=your-google-analytics-id
@@ -394,6 +398,7 @@ NavSphere/
 **认证失败**
 - 检查 `ADMIN_PASSWORD` 是否已配置且输入正确
 - 检查 `AUTH_SECRET` 是否已配置
+- 生产环境不要把 `NEXTAUTH_URL` 或 `AUTH_URL` 配成 `http://localhost:3000`；通常留空即可，如需固定域名请使用 `AUTH_URL=https://your-domain.com`
 
 **数据加载失败**
 - 验证 `KV_REST_API_URL` 和 `KV_REST_API_TOKEN` 是否正确

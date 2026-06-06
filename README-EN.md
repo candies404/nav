@@ -135,15 +135,19 @@ Create a `.env.local` file and configure the following variables:
 # Admin password
 ADMIN_PASSWORD=change-this-admin-password
 
-# Vercel KV / Upstash Redis REST configuration
+# Upstash Redis/KV REST configuration
 KV_REST_API_URL=https://your-redis-instance.upstash.io
 KV_REST_API_TOKEN=your-upstash-redis-rest-token
 UPSTASH_REDIS_KEY_PREFIX=navsphere
 
 # NextAuth Configuration
-NEXTAUTH_URL=http://localhost:3000
+# AUTH_URL/NEXTAUTH_URL is usually unnecessary when the platform forwards the request Host correctly.
+# If you need to pin a public URL, set AUTH_URL=https://your-domain.com. Do not use localhost in production.
+# AUTH_URL=http://localhost:3000
 AUTH_SECRET=your-random-auth-secret
 NEXT_PUBLIC_API_URL=http://localhost:3000
+# Optional: extra Server Actions allowed domains, separated by commas
+# SERVER_ACTION_ALLOWED_ORIGINS=example.com,www.example.com
 
 # Google Analytics Configuration (Optional)
 GA_ID=your-google-analytics-id
@@ -394,6 +398,7 @@ NavSphere/
 **Authentication Failure**
 - Check that `ADMIN_PASSWORD` is configured and entered correctly
 - Check that `AUTH_SECRET` is configured
+- In production, do not set `NEXTAUTH_URL` or `AUTH_URL` to `http://localhost:3000`; usually leave them unset, or use `AUTH_URL=https://your-domain.com` to pin a public domain
 
 **Data Loading Failure**
 - Verify that `KV_REST_API_URL` and `KV_REST_API_TOKEN` are correct

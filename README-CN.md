@@ -108,9 +108,13 @@ GITHUB_REPO=用于存储数据的仓库名
 GITHUB_BRANCH=main
 
 # NextAuth 配置
-NEXTAUTH_URL=http://localhost:3000
+# 部署平台能正确透传 Host 时通常不需要配置 AUTH_URL/NEXTAUTH_URL。
+# 如需固定公开访问地址，可设置 AUTH_URL=https://your-domain.com，生产环境不能使用 localhost。
+# AUTH_URL=http://localhost:3000
 AUTH_SECRET=使用以下命令生成:
 # openssl rand -base64 32
+# 可选：Server Actions 允许的额外域名，多个用英文逗号分隔
+# SERVER_ACTION_ALLOWED_ORIGINS=example.com,www.example.com
 ```
 
 ### 4. 权限配置
@@ -145,7 +149,7 @@ AUTH_SECRET=使用以下命令生成:
    - GITHUB_OWNER
    - GITHUB_REPO
    - GITHUB_BRANCH
-   - NEXTAUTH_URL (设置为你的域名)
+   - AUTH_URL (可选，需要固定公开访问地址时设置为你的域名，生产环境不能使用 localhost)
    - AUTH_SECRET
    - GA_ID (可选，Google Analytics ID)
 5. 部署项目
@@ -155,8 +159,10 @@ AUTH_SECRET=使用以下命令生成:
 需要配置以下环境变量：
 
 ```env
-NEXTAUTH_URL=http://localhost:3000
+# 部署平台能正确透传 Host 时通常不需要配置 AUTH_URL/NEXTAUTH_URL。
+# AUTH_URL=https://your-domain.com
 AUTH_SECRET=your-secret-here
+# SERVER_ACTION_ALLOWED_ORIGINS=example.com,www.example.com
 GITHUB_CLIENT_ID=your-github-id
 GITHUB_CLIENT_SECRET=your-github-secret
 GITHUB_OWNER=your-github-username

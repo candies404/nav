@@ -1,7 +1,7 @@
+import { getAdminPassword, getAuthSecret } from '@/lib/auth-config'
 import NextAuth from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import type { NextAuthConfig } from 'next-auth'
-import { getAdminPassword, getAuthSecret } from '@/lib/auth-config'
 
 const SESSION_MAX_AGE_SECONDS = 15 * 60
 
