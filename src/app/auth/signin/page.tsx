@@ -1,8 +1,7 @@
 'use client'
 
-import { FormEvent, Suspense, useState } from 'react'
-import { signIn } from 'next-auth/react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { FormEvent, Suspense, useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Icons } from '@/components/icons'
@@ -15,6 +14,34 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 
+async function fetchCsrfToken() {
+  const response = await fetch('/api/auth/csrf', {
+    credentials: 'same-origin',
+  })
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch auth csrf token')
+  }
+
+  const data = await response.json() as { csrfToken?: string }
+  if (!data.csrfToken) {
+    throw new Error('Auth csrf token is missing')
+  }
+
+  return data.csrfToken
+}
+
+function isAuthErrorUrl(value?: string | null) {
+  if (!value) return true
+
+  try {
+    const url = new URL(value, window.location.origin)
+    return url.searchParams.has('error') || url.searchParams.has('csrf')
+  } catch {
+    return true
+  }
+}
+
 function getSafeCallbackUrl(value: string | null) {
   if (!value || !value.startsWith('/') || value.startsWith('//')) {
     return '/admin'
@@ -24,12 +51,28 @@ function getSafeCallbackUrl(value: string | null) {
 }
 
 function SignInContent() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const callbackUrl = getSafeCallbackUrl(searchParams?.get('callbackUrl') || null)
   const [password, setPassword] = useState('')
+  const [csrfToken, setCsrfToken] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    let isActive = true
+
+    fetchCsrfToken()
+      .then((token) => {
+        if (isActive) setCsrfToken(token)
+      })
+      .catch((tokenError) => {
+        console.error('预加载登录令牌失败:', tokenError)
+      })
+
+    return () => {
+      isActive = false
+    }
+  }, [])
 
   const handleSignIn = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -37,19 +80,33 @@ function SignInContent() {
     setError('')
 
     try {
-      const result = await signIn('credentials', {
-        password,
-        redirect: false,
-        callbackUrl,
+      const token = csrfToken || await fetchCsrfToken()
+      setCsrfToken(token)
+
+      const response = await fetch(`/api/auth/callback/credentials?${new URLSearchParams({ callbackUrl })}`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-Auth-Return-Redirect': '1',
+        },
+        body: new URLSearchParams({
+          csrfToken: token,
+          password,
+          callbackUrl,
+        }),
       })
 
-      if (result?.error) {
+      const result = await response.json() as { url?: string | null }
+
+      if (!response.ok || isAuthErrorUrl(result.url)) {
         setError('管理密码不正确')
+        setCsrfToken(null)
         setIsLoading(false)
         return
       }
 
-      router.replace(callbackUrl)
+      window.location.replace(callbackUrl)
     } catch (error) {
       console.error('登录失败:', error)
       setError('登录失败，请稍后重试')
