@@ -201,14 +201,14 @@ export default function NavigationPage() {
     )
 
   return (
-    <div className="h-full flex-1 flex-col space-y-8 p-8 md:flex">
-      <div className="flex items-center justify-between space-x-4">
-        <div className="flex items-center gap-4 flex-1">
+    <div className="flex h-full flex-1 flex-col space-y-4 sm:space-y-6 md:flex">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
           <Input
             placeholder="搜索分类..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="max-w-[300px]"
+            className="w-full sm:max-w-[300px]"
           />
           <Select
             value={showEnabled === null ? "all" : String(showEnabled)}
@@ -220,7 +220,7 @@ export default function NavigationPage() {
               }
             }}
           >
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-full sm:w-[180px]">
               <SelectValue placeholder="状态筛选" />
             </SelectTrigger>
             <SelectContent>
@@ -230,14 +230,14 @@ export default function NavigationPage() {
             </SelectContent>
           </Select>
         </div>
-        <Button onClick={() => setIsDialogOpen(true)}>
+        <Button onClick={() => setIsDialogOpen(true)} className="w-full sm:w-auto">
           <Plus className="mr-2 h-4 w-4" />
           添加分类
         </Button>
       </div>
       <div className="space-y-4">
         {error ? (
-          <div className="flex h-[450px] shrink-0 items-center justify-center rounded-md border border-dashed">
+          <div className="flex min-h-[280px] shrink-0 items-center justify-center rounded-md border border-dashed p-4 sm:min-h-[450px]">
             <div className="mx-auto flex max-w-[420px] flex-col items-center justify-center text-center">
               <AlertTriangle className="h-10 w-10 text-muted-foreground" />
               <h3 className="mt-4 text-lg font-semibold">加载失败</h3>
@@ -264,7 +264,7 @@ export default function NavigationPage() {
             </div>
           ))
         ) : filteredItems.length === 0 ? (
-          <div className="flex h-[450px] shrink-0 items-center justify-center rounded-md border border-dashed">
+          <div className="flex min-h-[280px] shrink-0 items-center justify-center rounded-md border border-dashed p-4 sm:min-h-[450px]">
             <div className="mx-auto flex max-w-[420px] flex-col items-center justify-center text-center">
               <Inbox className="h-10 w-10 text-muted-foreground" />
               <h3 className="mt-4 text-lg font-semibold">暂无分类</h3>

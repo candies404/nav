@@ -78,9 +78,9 @@ export function Sidebar({ className, navigationData, siteInfo, onClose }: Sideba
   }
 
   return (
-    <div className={cn("w-64 bg-background", className)}>
+    <div className={cn("w-full bg-background lg:w-64", className)}>
       <div className="flex h-14 items-center px-4">
-        <Link href="/" className="flex items-center gap-2 font-semibold">
+        <Link href="/" className="flex min-w-0 items-center gap-2 font-semibold">
           {siteInfo.appearance.logo ? (
             <Image
               src={siteInfo.appearance.logo}
@@ -92,7 +92,7 @@ export function Sidebar({ className, navigationData, siteInfo, onClose }: Sideba
           ) : (
             <LucideIcons.Globe className="h-6 w-6" />
           )}
-          <span>{siteInfo.basic.title}</span>
+          <span className="truncate">{siteInfo.basic.title}</span>
         </Link>
 
         {/* 移动模式下的关闭按钮 */}
@@ -100,7 +100,7 @@ export function Sidebar({ className, navigationData, siteInfo, onClose }: Sideba
           <Button
             variant="ghost"
             size="icon"
-            className="ml-auto sm:hidden"
+            className="ml-auto lg:hidden"
             onClick={onClose}
             aria-label="关闭侧边栏"
           >
@@ -109,18 +109,18 @@ export function Sidebar({ className, navigationData, siteInfo, onClose }: Sideba
         )}
       </div>
 
-      <ScrollArea className="h-[calc(100vh-3.5rem)] px-3 py-2">
+      <ScrollArea className="h-[calc(100svh-3.5rem)] px-3 py-2">
         <div className="space-y-1">
           {navigationData.navigationItems.map((category) => (
             <div key={category.id} className="py-2">
               <div className="flex items-center">
                 <Button
                   variant="ghost"
-                  className="flex-1 justify-start gap-2 font-medium text-muted-foreground hover:text-foreground cursor-pointer"
+                  className="min-w-0 flex-1 justify-start gap-2 font-medium text-muted-foreground hover:text-foreground cursor-pointer"
                   onClick={() => handleCategoryClick(category.id)}
                 >
                   {renderIcon(category.icon)}
-                  <span>{category.title}</span>
+                  <span className="truncate">{category.title}</span>
                 </Button>
 
                 {category.subCategories && category.subCategories.length > 0 && (
@@ -156,7 +156,7 @@ export function Sidebar({ className, navigationData, siteInfo, onClose }: Sideba
                         onClose?.()
                       }}
                     >
-                      <span>{subCategory.title}</span>
+                      <span className="truncate">{subCategory.title}</span>
                     </Button>
                   ))}
                 </div>

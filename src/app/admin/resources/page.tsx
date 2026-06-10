@@ -84,7 +84,7 @@ interface LocalResourceMetadata {
 
 // 修改骨架屏组件，进一步调整大小
 const ResourceGridSkeleton = () => (
-  <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-2">
+  <div className="grid grid-cols-2 gap-2 min-[420px]:grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10">
     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((index) => (
       <div key={index} className="bg-white rounded-lg border shadow-sm animate-pulse">
         <div className="aspect-square bg-gray-200 rounded-t-lg" />
@@ -523,27 +523,27 @@ export default function ResourceManagement() {
         </div>
       )}
 
-      <div className="space-y-4 p-6">
+      <div className="space-y-4 p-3 sm:p-6">
         <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="relative">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+              <div className="relative w-full sm:w-auto">
                 <Icons.search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
                   placeholder="搜索资源..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 max-w-md"
+                  className="w-full pl-10 sm:max-w-md"
                 />
               </div>
 
               {filteredResources.length > 0 && (
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-2 min-[520px]:flex-row min-[520px]:items-center">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={selectAllResources}
-                    className="flex items-center gap-2"
+                    className="flex w-full items-center gap-2 min-[520px]:w-auto"
                   >
                     {selectedResources.size === filteredResources.length ? (
                       <Icons.checkSquare className="h-4 w-4" />
@@ -558,7 +558,7 @@ export default function ResourceManagement() {
                       variant="destructive"
                       size="sm"
                       onClick={handleBatchDelete}
-                      className="flex items-center gap-2"
+                      className="flex w-full items-center gap-2 min-[520px]:w-auto"
                     >
                       <Icons.trash2 className="h-4 w-4" />
                       删除选中 ({selectedResources.size})
@@ -568,7 +568,7 @@ export default function ResourceManagement() {
               )}
             </div>
 
-            <Button onClick={() => setIsDialogOpen(true)}>
+            <Button onClick={() => setIsDialogOpen(true)} className="w-full sm:w-auto">
               <Icons.plus className="mr-2 h-4 w-4" />
               上传资源
             </Button>
@@ -590,7 +590,7 @@ export default function ResourceManagement() {
         {isLoading ? (
           <ResourceGridSkeleton />
         ) : filteredResources.length > 0 ? (
-          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-2">
+          <div className="grid grid-cols-2 gap-2 min-[420px]:grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10">
             {filteredResources.map((resource, index) => (
               <div
                 key={index}

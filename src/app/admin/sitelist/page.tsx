@@ -995,7 +995,7 @@ export default function SiteListPage() {
   return (
     <TooltipProvider>
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-1">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-sm text-muted-foreground">
@@ -1005,8 +1005,8 @@ export default function SiteListPage() {
                 )}
               </span>
             </div>
-            <div className="flex gap-4">
-              <div className="relative max-w-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-4">
+              <div className="relative w-full sm:max-w-sm">
                 <Input
                   placeholder="搜索站点..."
                   value={searchQuery}
@@ -1031,7 +1031,7 @@ export default function SiteListPage() {
                   setSubCategoryFilter('all') // 重置子分类筛选
                 }}
               >
-                <SelectTrigger className="w-[200px]">
+                <SelectTrigger className="w-full sm:w-[200px]">
                   <SelectValue placeholder="按分类筛选" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1048,7 +1048,7 @@ export default function SiteListPage() {
                 value={subCategoryFilter}
                 onValueChange={setSubCategoryFilter}
               >
-                <SelectTrigger className="w-[200px]">
+                <SelectTrigger className="w-full sm:w-[200px]">
                   <SelectValue placeholder="按子分类筛选" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1076,12 +1076,12 @@ export default function SiteListPage() {
               </Select>
             </div>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:space-x-0 lg:justify-end">
             {selectedSites.length > 0 && (
               <Button
                 variant="destructive"
                 onClick={() => setShowDeleteDialog(true)}
-                className="whitespace-nowrap"
+                className="w-full whitespace-nowrap sm:w-auto"
                 disabled={isBatchDeleting}
               >
                 {isBatchDeleting ? (
@@ -1117,7 +1117,7 @@ export default function SiteListPage() {
               }
             }}>
               <DialogTrigger asChild>
-                <Button>
+                <Button className="w-full sm:w-auto">
                   <Icons.plus className="mr-2 h-4 w-4" />
                   添加站点
                 </Button>

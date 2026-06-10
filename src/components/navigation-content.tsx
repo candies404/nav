@@ -105,8 +105,8 @@ export function NavigationContent({ navigationData, siteData }: NavigationConten
   }
 
   return (
-    <div className="flex flex-col sm:flex-row min-h-screen">
-      <div className="hidden sm:block">
+    <div className="flex min-h-screen flex-col lg:flex-row">
+      <div className="hidden lg:block">
         <Sidebar
           navigationData={navigationData}
           siteInfo={siteData}
@@ -115,12 +115,12 @@ export function NavigationContent({ navigationData, siteData }: NavigationConten
       </div>
 
       <div className={cn(
-        "fixed inset-0 z-50 bg-background/80 backdrop-blur-sm transition-all sm:hidden",
+        "fixed inset-0 z-50 bg-background/80 backdrop-blur-sm transition-all lg:hidden",
         isSidebarOpen ? "opacity-100" : "opacity-0 pointer-events-none"
       )}>
         <div className={cn(
-          "fixed inset-y-0 right-0 sm:left-0 w-3/4 max-w-xs bg-background shadow-lg transform transition-transform duration-200 ease-in-out",
-          isSidebarOpen ? "translate-x-0" : "translate-x-full sm:-translate-x-full"
+          "fixed inset-y-0 right-0 w-[85vw] max-w-xs bg-background shadow-lg transform transition-transform duration-200 ease-in-out",
+          isSidebarOpen ? "translate-x-0" : "translate-x-full"
         )}>
           <Sidebar
             navigationData={navigationData}
@@ -130,10 +130,10 @@ export function NavigationContent({ navigationData, siteData }: NavigationConten
         </div>
       </div>
 
-      <main className="flex-1">
-        <div className="sticky top-0 bg-background/90 backdrop-blur-sm z-30 px-3 sm:px-6 py-2">
-          <div className="flex items-center gap-3">
-            <div className="flex-1">
+      <main className="min-w-0 flex-1">
+        <div className="sticky top-0 bg-background/90 backdrop-blur-sm z-30 px-2 py-2 sm:px-4 lg:px-6">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="min-w-0 flex-1">
               <SearchBar
                 navigationData={navigationData}
                 onSearch={handleSearch}
@@ -150,7 +150,7 @@ export function NavigationContent({ navigationData, siteData }: NavigationConten
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="hover:bg-accent hover:text-accent-foreground"
+                  className="h-9 w-9 hover:bg-accent hover:text-accent-foreground sm:h-10 sm:w-10"
                 >
                   <Send className="h-5 w-5" />
                 </Button>
@@ -160,48 +160,21 @@ export function NavigationContent({ navigationData, siteData }: NavigationConten
                 href="https://github.com/tianyaxiang/NavSphere"
                 target="_blank"
                 rel="noopener noreferrer"
+                className="hidden min-[420px]:block"
                 aria-label="访问 GitHub 仓库"
               >
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="hover:bg-accent hover:text-accent-foreground"
+                  className="h-9 w-9 hover:bg-accent hover:text-accent-foreground sm:h-10 sm:w-10"
                 >
                   <Github className="h-5 w-5" />
-                </Button>
-              </Link>
-              <Link
-                href="https://github.com/tianyaxiang/navsphere-extension"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="下载浏览器插件"
-              >
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="hover:bg-accent hover:text-accent-foreground"
-                >
-                  <Puzzle className="h-5 w-5" />
-                </Button>
-              </Link>
-              <Link
-                href="https://mp.weixin.qq.com/s/XBeedyqHGJtaAa_v9EXz4A"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="查看帮助文档"
-              >
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="hover:bg-accent hover:text-accent-foreground"
-                >
-                  <HelpCircle className="h-5 w-5" />
                 </Button>
               </Link>
               <Button
                 variant="ghost"
                 size="icon"
-                className="sm:hidden"
+                className="h-9 w-9 lg:hidden sm:h-10 sm:w-10"
                 onClick={() => setIsSidebarOpen(!isSidebarOpen)}
               >
                 <Menu className="h-5 w-5" />
@@ -210,11 +183,11 @@ export function NavigationContent({ navigationData, siteData }: NavigationConten
           </div>
         </div>
 
-        <div className="px-3 sm:px-6 py-3 sm:py-6">
-          <div className="space-y-6">
+        <div className="px-2 py-3 sm:px-4 sm:py-5 lg:px-6 lg:py-6">
+          <div className="space-y-5 sm:space-y-6">
             {navigationData.navigationItems.map((category) => (
               <section key={category.id} id={category.id} className="scroll-m-16">
-                <div className="space-y-4">
+                <div className="space-y-3 sm:space-y-4">
                   <h2 className="text-base font-medium tracking-tight">
                     {category.title}
                   </h2>
@@ -225,7 +198,7 @@ export function NavigationContent({ navigationData, siteData }: NavigationConten
                         <h3 className="text-sm font-medium text-muted-foreground">
                           {subCategory.title}
                         </h3>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 gap-2 min-[520px]:grid-cols-2 xl:grid-cols-3 sm:gap-3">
                           {(subCategory.items || []).map((item) => (
                             <NavigationCard key={item.id} item={item} siteConfig={siteData} />
                           ))}
@@ -233,7 +206,7 @@ export function NavigationContent({ navigationData, siteData }: NavigationConten
                       </div>
                     ))
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 gap-2 min-[520px]:grid-cols-2 xl:grid-cols-3 sm:gap-3">
                       {(category.items || []).map((item) => (
                         <NavigationCard key={item.id} item={item} siteConfig={siteData} />
                       ))}

@@ -52,7 +52,7 @@ const FaviconDownloader: React.FC = () => {
     return (
         <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
             <div className="max-w-2xl mx-auto py-12 px-4">
-                <div className="bg-white rounded-lg shadow-lg p-8">
+                <div className="rounded-lg bg-white p-4 shadow-lg sm:p-8">
                     <h1 className="text-3xl font-bold text-center text-gray-800 mb-8">
                         Favicon 下载器
                     </h1>
@@ -86,7 +86,7 @@ const FaviconDownloader: React.FC = () => {
                         </div>
 
                         {faviconUrl && (
-                            <div className="text-center p-6 bg-gray-50 rounded-lg">
+                            <div className="rounded-lg bg-gray-50 p-4 text-center sm:p-6">
                                 <img
                                     src={faviconUrl}
                                     alt="Favicon"

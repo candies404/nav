@@ -98,15 +98,15 @@ export function SubmissionForm({ navigationData }: SubmissionFormProps) {
     }
 
     return (
-        <Card className="w-full max-w-2xl mx-auto border-0 shadow-xl bg-gradient-to-br from-background to-muted/30">
-            <CardHeader className="space-y-1 pb-6">
-                <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-xl bg-primary/10">
-                        <Send className="h-6 w-6 text-primary" />
+        <Card className="mx-auto w-full max-w-2xl border-0 bg-gradient-to-br from-background to-muted/30 shadow-xl">
+            <CardHeader className="space-y-1 pb-4 sm:pb-6">
+                <div className="flex items-start gap-3 sm:items-center">
+                    <div className="rounded-xl bg-primary/10 p-2 sm:p-2.5">
+                        <Send className="h-5 w-5 text-primary sm:h-6 sm:w-6" />
                     </div>
-                    <div>
-                        <CardTitle className="text-2xl font-bold">投稿网站</CardTitle>
-                        <CardDescription className="text-base">
+                    <div className="min-w-0">
+                        <CardTitle className="text-xl font-bold sm:text-2xl">投稿网站</CardTitle>
+                        <CardDescription className="text-sm sm:text-base">
                             分享优质网站，与大家一起发现更多好资源
                         </CardDescription>
                     </div>
@@ -142,7 +142,7 @@ export function SubmissionForm({ navigationData }: SubmissionFormProps) {
                     </Alert>
                 )}
 
-                <form onSubmit={handleSubmit} className="space-y-6">
+                <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-6">
                     {/* 网站名称 */}
                     <div className="space-y-2">
                         <Label htmlFor="title" className="flex items-center gap-2 text-sm font-medium">

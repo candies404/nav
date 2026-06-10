@@ -99,14 +99,15 @@ export default function AdminDashboard() {
   ]
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">控制台</h1>
+    <div className="space-y-5 sm:space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-2xl font-bold sm:text-3xl">控制台</h1>
         <Button
           variant="outline"
           size="sm"
           onClick={() => fetchStats(true)}
           disabled={isRefreshing}
+          className="w-full sm:w-auto"
         >
           <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
           刷新统计
@@ -114,7 +115,7 @@ export default function AdminDashboard() {
       </div>
       
       {/* 统计卡片 */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
         {statsItems.map((item, index) => (
           <Card key={index}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -124,7 +125,7 @@ export default function AdminDashboard() {
               <item.icon className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{item.value}</div>
+              <div className="text-xl font-bold sm:text-2xl">{item.value}</div>
               <p className="text-xs text-muted-foreground">
                 {item.description}
               </p>
@@ -134,7 +135,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* 原有的功能卡片 */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">
         {dashboardItems.map(item => (
           <Link key={item.href} href={item.href}>
             <Card className="hover:shadow-lg transition-shadow cursor-pointer">

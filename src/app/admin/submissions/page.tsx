@@ -148,10 +148,10 @@ export default function SubmissionsPage() {
     }
 
     return (
-        <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight">投稿审核</h1>
+        <div className="space-y-5 sm:space-y-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                    <h1 className="text-xl font-bold tracking-tight sm:text-2xl">投稿审核</h1>
                     <p className="text-muted-foreground">
                         审核用户提交的网站投稿
                     </p>
@@ -161,6 +161,7 @@ export default function SubmissionsPage() {
                     size="sm"
                     onClick={() => fetchSubmissions(activeTab)}
                     disabled={loading}
+                    className="w-full sm:w-auto"
                 >
                     <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
                     刷新
@@ -168,16 +169,16 @@ export default function SubmissionsPage() {
             </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid w-full max-w-md grid-cols-3">
-                    <TabsTrigger value="pending" className="gap-2">
+                <TabsList className="grid w-full grid-cols-3 sm:max-w-md">
+                    <TabsTrigger value="pending" className="gap-1 px-2 text-xs sm:gap-2 sm:text-sm">
                         <Clock className="h-4 w-4" />
                         待审核
                     </TabsTrigger>
-                    <TabsTrigger value="approved" className="gap-2">
+                    <TabsTrigger value="approved" className="gap-1 px-2 text-xs sm:gap-2 sm:text-sm">
                         <CheckCircle className="h-4 w-4" />
                         已通过
                     </TabsTrigger>
-                    <TabsTrigger value="rejected" className="gap-2">
+                    <TabsTrigger value="rejected" className="gap-1 px-2 text-xs sm:gap-2 sm:text-sm">
                         <XCircle className="h-4 w-4" />
                         已拒绝
                     </TabsTrigger>
@@ -206,7 +207,7 @@ export default function SubmissionsPage() {
                                     <p>暂无投稿</p>
                                 </div>
                             ) : (
-                                <Table>
+                                <Table className="min-w-[760px]">
                                     <TableHeader>
                                         <TableRow>
                                             <TableHead className="w-12">#</TableHead>
@@ -233,7 +234,7 @@ export default function SubmissionsPage() {
                                                             href={submission.submissionData.url}
                                                             target="_blank"
                                                             rel="noopener noreferrer"
-                                                            className="text-primary hover:underline flex items-center gap-1 max-w-[200px] truncate"
+                                                            className="flex max-w-[200px] items-center gap-1 truncate text-primary hover:underline"
                                                         >
                                                             {submission.submissionData.url}
                                                             <ExternalLink className="h-3 w-3 flex-shrink-0" />
@@ -296,7 +297,7 @@ export default function SubmissionsPage() {
 
                     {selectedSubmission?.submissionData && (
                         <div className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid gap-4 sm:grid-cols-2">
                                 <div>
                                     <label className="text-sm font-medium text-muted-foreground">网站名称</label>
                                     <p className="mt-1">{selectedSubmission.submissionData.title}</p>
@@ -308,7 +309,7 @@ export default function SubmissionsPage() {
                                             href={selectedSubmission.submissionData.url}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="text-primary hover:underline flex items-center gap-1"
+                                            className="flex min-w-0 items-center gap-1 break-all text-primary hover:underline"
                                         >
                                             {selectedSubmission.submissionData.url}
                                             <ExternalLink className="h-4 w-4" />
@@ -324,7 +325,7 @@ export default function SubmissionsPage() {
                                 </p>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid gap-4 sm:grid-cols-2">
                                 <div>
                                     <label className="text-sm font-medium text-muted-foreground">目标分类</label>
                                     <p className="mt-1">{selectedSubmission.submissionData.category}</p>

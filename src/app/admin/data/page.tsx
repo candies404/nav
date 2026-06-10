@@ -381,12 +381,12 @@ export default function DataManagementPage() {
   }, [isSaving, isLoading, isJsonValid, navigationData])
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 sm:space-y-6">
       {/* 页面标题 */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-2">
-            <h1 className="text-3xl font-bold tracking-tight">数据管理</h1>
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">数据管理</h1>
           </div>
           <p className="text-muted-foreground">
             管理导航数据，支持恢复初始化、在线编辑和数据下载
@@ -401,7 +401,7 @@ export default function DataManagementPage() {
       {/* 操作面板 */}
       <Card>
         <CardContent className="pt-6">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <Button
               onClick={loadNavigationData}
               disabled={isLoading}

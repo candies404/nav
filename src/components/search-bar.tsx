@@ -94,7 +94,7 @@ export function SearchBar({ onSearch, searchResults, searchQuery, siteConfig }: 
   const showResults = isFocused && searchQuery.trim().length > 0
 
   return (
-    <div ref={searchRef} className="relative w-full max-w-lg mx-auto">
+    <div ref={searchRef} className="relative mx-auto w-full max-w-lg min-w-0">
       <div className="relative">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
@@ -103,7 +103,7 @@ export function SearchBar({ onSearch, searchResults, searchQuery, siteConfig }: 
           value={searchQuery}
           onChange={(e) => handleInputChange(e.target.value)}
           onFocus={() => setIsFocused(true)}
-          className="pl-10 pr-20 h-10 rounded-lg border shadow-sm"
+          className="h-9 rounded-lg border pl-9 pr-9 text-sm shadow-sm sm:h-10 sm:pl-10 sm:pr-20"
         />
         <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1">
           {searchQuery && (
@@ -112,6 +112,7 @@ export function SearchBar({ onSearch, searchResults, searchQuery, siteConfig }: 
               size="sm"
               onClick={clearSearch}
               className="h-6 w-6 p-0 hover:bg-muted"
+              aria-label="Clear search"
             >
               <X className="h-3 w-3" />
             </Button>
@@ -123,9 +124,9 @@ export function SearchBar({ onSearch, searchResults, searchQuery, siteConfig }: 
       </div>
 
       {showResults && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-background border rounded-lg shadow-xl z-50 max-h-[70vh] overflow-hidden">
+        <div className="absolute top-full left-0 right-0 mt-2 bg-background border rounded-lg shadow-xl z-50 max-h-[min(70svh,28rem)] overflow-hidden">
           <Command className="border-0 shadow-none">
-            <CommandList className="max-h-[70vh] overflow-y-auto">
+            <CommandList className="max-h-[min(70svh,28rem)] overflow-y-auto">
               {searchResults.length === 0 ? (
                 <div className="py-8 text-center">
                   <div className="text-muted-foreground text-sm">
@@ -143,9 +144,9 @@ export function SearchBar({ onSearch, searchResults, searchQuery, siteConfig }: 
                         key={item.id}
                         value={item.title}
                         onSelect={() => handleItemSelect(item)}
-                        className="flex items-center gap-3 py-3 px-3 cursor-pointer hover:bg-accent/50"
+                        className="flex items-center gap-2 py-2.5 px-2.5 sm:gap-3 sm:py-3 sm:px-3 cursor-pointer hover:bg-accent/50"
                       >
-                        <div className="flex-shrink-0 w-8 h-8">
+                        <div className="h-7 w-7 flex-shrink-0 sm:h-8 sm:w-8">
                           {item.icon && (
                             <img
                               src={item.icon}
@@ -158,7 +159,7 @@ export function SearchBar({ onSearch, searchResults, searchQuery, siteConfig }: 
                             />
                           )}
                         </div>
-                        <div className="flex flex-col flex-1 gap-1">
+                        <div className="flex min-w-0 flex-1 flex-col gap-1">
                           <span className="text-sm font-medium">
                             {highlightText(item.title)}
                           </span>
@@ -180,9 +181,9 @@ export function SearchBar({ onSearch, searchResults, searchQuery, siteConfig }: 
                             key={item.id}
                             value={item.title}
                             onSelect={() => handleItemSelect(item)}
-                            className="flex items-center gap-3 py-3 px-3 cursor-pointer hover:bg-accent/50"
+                            className="flex items-center gap-2 py-2.5 px-2.5 sm:gap-3 sm:py-3 sm:px-3 cursor-pointer hover:bg-accent/50"
                           >
-                            <div className="flex-shrink-0 w-8 h-8">
+                            <div className="h-7 w-7 flex-shrink-0 sm:h-8 sm:w-8">
                               {item.icon && (
                                 <img
                                   src={item.icon}
@@ -195,7 +196,7 @@ export function SearchBar({ onSearch, searchResults, searchQuery, siteConfig }: 
                                 />
                               )}
                             </div>
-                            <div className="flex flex-col flex-1 gap-1">
+                            <div className="flex min-w-0 flex-1 flex-col gap-1">
                               <span className="text-sm font-medium">
                                 {highlightText(item.title)}
                               </span>

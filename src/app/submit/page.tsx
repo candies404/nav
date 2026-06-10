@@ -17,9 +17,9 @@ export default async function SubmitPage() {
 
     return (
         <Container>
-            <div className="min-h-screen py-8 px-4">
+            <div className="min-h-screen px-1 py-4 sm:px-4 sm:py-8">
                 {/* 返回按钮 */}
-                <div className="max-w-2xl mx-auto mb-6">
+                <div className="mx-auto mb-4 max-w-2xl sm:mb-6">
                     <Link href="/">
                         <Button variant="ghost" className="gap-2 hover:bg-muted">
                             <ArrowLeft className="h-4 w-4" />
@@ -32,7 +32,7 @@ export default async function SubmitPage() {
                 <SubmissionForm navigationData={navigationData as unknown as NavigationData} />
 
                 {/* 投稿说明 */}
-                <div className="max-w-2xl mx-auto mt-8 p-6 rounded-xl bg-muted/50">
+                <div className="mx-auto mt-6 max-w-2xl rounded-xl bg-muted/50 p-4 sm:mt-8 sm:p-6">
                     <h3 className="font-semibold mb-3">📋 投稿须知</h3>
                     <ul className="space-y-2 text-sm text-muted-foreground">
                         <li className="flex gap-2">

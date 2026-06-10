@@ -143,7 +143,7 @@ function SignInContent() {
           </blockquote>
         </div>
       </div>
-      <div className="lg:p-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         <div className="mx-auto flex h-full w-full flex-col justify-center space-y-6 sm:w-[350px]">
           <Card>
             <CardHeader className="space-y-1">

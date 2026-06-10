@@ -102,9 +102,9 @@ export default function SiteSettings() {
 
   return (
     <>
-      <div className="space-y-6">
+      <div className="space-y-5 sm:space-y-6">
         <Tabs defaultValue="basic" className="space-y-4">
-          <TabsList>
+          <TabsList className="w-full justify-start sm:w-auto">
             <TabsTrigger value="basic">基本信息</TabsTrigger>
             <TabsTrigger value="appearance">外观设置</TabsTrigger>
             <TabsTrigger value="navigation">导航设置</TabsTrigger>
@@ -116,7 +116,7 @@ export default function SiteSettings() {
               </CardHeader>
               <CardContent>
                 <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5 sm:space-y-8">
                     <FormField
                       control={form.control}
                       name="basic.title"
@@ -172,7 +172,7 @@ export default function SiteSettings() {
                     <div className="flex justify-start">
                       <Button 
                         type="submit"
-                        className="w-[120px]"
+                        className="w-full sm:w-[120px]"
                         disabled={form.formState.isSubmitting}
                       >
                         {form.formState.isSubmitting ? (
@@ -200,7 +200,7 @@ export default function SiteSettings() {
               </CardHeader>
               <CardContent>
                 <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5 sm:space-y-8">
                     <FormField
                       control={form.control}
                       name="appearance.logo"
@@ -236,7 +236,7 @@ export default function SiteSettings() {
                     <div className="flex justify-start">
                       <Button 
                         type="submit"
-                        className="w-[120px]"
+                        className="w-full sm:w-[120px]"
                         disabled={form.formState.isSubmitting}
                       >
                         {form.formState.isSubmitting ? (
@@ -264,7 +264,7 @@ export default function SiteSettings() {
               </CardHeader>
               <CardContent>
                 <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5 sm:space-y-8">
                     <FormField
                       control={form.control}
                       name="navigation.linkTarget"
@@ -292,7 +292,7 @@ export default function SiteSettings() {
                     <div className="flex justify-start">
                       <Button 
                         type="submit"
-                        className="w-[120px]"
+                        className="w-full sm:w-[120px]"
                         disabled={form.formState.isSubmitting}
                       >
                         {form.formState.isSubmitting ? (
