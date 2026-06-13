@@ -1,9 +1,7 @@
-import { getAdminPassword, getAuthSecret } from '@/lib/auth-config'
+import { ADMIN_USER_ID, SESSION_MAX_AGE_SECONDS, getAdminPassword, getAuthSecret } from '@/lib/auth-config'
 import NextAuth from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import type { NextAuthConfig } from 'next-auth'
-
-const SESSION_MAX_AGE_SECONDS = 15 * 60
 
 // Keep the comparison work predictable for equal-length inputs; the password
 // comes from ADMIN_PASSWORD, falling back to the local setup default.
@@ -39,7 +37,7 @@ const config = {
         }
 
         return {
-          id: 'admin',
+          id: ADMIN_USER_ID,
           name: 'Admin',
           email: 'admin@navsphere.local',
         }

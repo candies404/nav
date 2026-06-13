@@ -1,4 +1,15 @@
 export const DEFAULT_ADMIN_PASSWORD = '123456'
+export const ADMIN_USER_ID = 'admin'
+export const SESSION_MAX_AGE_SECONDS = 15 * 60
+
+const MIN_AUTH_SECRET_LENGTH = 32
+const PLACEHOLDER_AUTH_SECRETS = new Set([
+  'your-random-auth-secret',
+  'your-secret-key',
+  'generate-a-32-byte-random-secret-before-deploy',
+  'changeme',
+  'change-me',
+])
 
 const LOCAL_AUTH_HOSTS = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'])
 
@@ -35,5 +46,26 @@ export function getAdminPassword() {
 }
 
 export function getAuthSecret() {
-  return process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || getAdminPassword()
+  const configuredSecret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET
+
+  if (configuredSecret) {
+    if (process.env.NODE_ENV === 'production') {
+      if (
+        configuredSecret.length < MIN_AUTH_SECRET_LENGTH ||
+        PLACEHOLDER_AUTH_SECRETS.has(configuredSecret)
+      ) {
+        throw new Error(
+          `AUTH_SECRET must be a random value with at least ${MIN_AUTH_SECRET_LENGTH} characters in production`
+        )
+      }
+    }
+
+    return configuredSecret
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('AUTH_SECRET or NEXTAUTH_SECRET is required in production')
+  }
+
+  return getAdminPassword()
 }
