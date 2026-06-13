@@ -5,11 +5,10 @@ import { Input } from '@/registry/new-york/ui/input'
 import { Command, CommandList, CommandGroup, CommandItem } from '@/registry/new-york/ui/command'
 import { Search, X } from 'lucide-react'
 import { Button } from '@/registry/new-york/ui/button'
-import type { NavigationData, NavigationItem, NavigationSubItem } from '@/types/navigation'
+import type { NavigationItem, NavigationSubItem } from '@/types/navigation'
 import type { SiteConfig } from '@/types/site'
 
 interface SearchBarProps {
-  navigationData: NavigationData
   onSearch: (query: string) => void
   searchResults: Array<{
     category: NavigationItem
@@ -59,7 +58,8 @@ export function SearchBar({ onSearch, searchResults, searchQuery, siteConfig }: 
 
   const highlightText = (text: string) => {
     if (!searchQuery) return text
-    const parts = text.split(new RegExp(`(${searchQuery})`, 'gi'))
+    const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const parts = text.split(new RegExp(`(${escapedQuery})`, 'gi'))
     return parts.map((part, i) => 
       part.toLowerCase() === searchQuery.toLowerCase() ? 
         <span key={i} className="bg-yellow-200 dark:bg-yellow-800">{part}</span> : part
@@ -151,6 +151,10 @@ export function SearchBar({ onSearch, searchResults, searchQuery, siteConfig }: 
                             <img
                               src={item.icon}
                               alt={`${item.title} icon`}
+                              width={32}
+                              height={32}
+                              loading="lazy"
+                              decoding="async"
                               className="w-full h-full object-contain rounded"
                               onError={(e) => {
                                 const target = e.target as HTMLImageElement
@@ -188,6 +192,10 @@ export function SearchBar({ onSearch, searchResults, searchQuery, siteConfig }: 
                                 <img
                                   src={item.icon}
                                   alt={`${item.title} icon`}
+                                  width={32}
+                                  height={32}
+                                  loading="lazy"
+                                  decoding="async"
                                   className="w-full h-full object-contain rounded"
                                   onError={(e) => {
                                     const target = e.target as HTMLImageElement

@@ -8,11 +8,10 @@ import { Sidebar } from '@/components/sidebar'
 import { SearchBar } from '@/components/search-bar'
 import { ModeToggle } from '@/components/mode-toggle'
 import { Footer } from '@/components/footer'
-import { Github, HelpCircle, Puzzle, Send } from 'lucide-react'
+import { Github, Menu, Send } from 'lucide-react'
 import { Button } from "@/registry/new-york/ui/button"
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
-import { Menu } from 'lucide-react'
 
 interface NavigationContentProps {
   navigationData: NavigationData
@@ -81,22 +80,6 @@ export function NavigationContent({ navigationData, siteData }: NavigationConten
       }
     })
 
-    // 调试信息
-    if (query && results.length > 0) {
-      console.log('搜索结果:', {
-        query,
-        totalResults: results.length,
-        results: results.map(r => ({
-          category: r.category.title,
-          mainItems: r.items.length,
-          subCategories: r.subCategories.map(s => ({
-            title: s.title,
-            items: s.items.length
-          }))
-        }))
-      })
-    }
-
     return results
   }, [navigationData, searchQuery])
 
@@ -135,7 +118,6 @@ export function NavigationContent({ navigationData, siteData }: NavigationConten
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="min-w-0 flex-1">
               <SearchBar
-                navigationData={navigationData}
                 onSearch={handleSearch}
                 searchResults={searchResults}
                 searchQuery={searchQuery}
@@ -186,7 +168,11 @@ export function NavigationContent({ navigationData, siteData }: NavigationConten
         <div className="px-2 py-3 sm:px-4 sm:py-5 lg:px-6 lg:py-6">
           <div className="space-y-5 sm:space-y-6">
             {navigationData.navigationItems.map((category) => (
-              <section key={category.id} id={category.id} className="scroll-m-16">
+              <section
+                key={category.id}
+                id={category.id}
+                className="scroll-m-16 [content-visibility:auto] [contain-intrinsic-size:720px]"
+              >
                 <div className="space-y-3 sm:space-y-4">
                   <h2 className="text-base font-medium tracking-tight">
                     {category.title}

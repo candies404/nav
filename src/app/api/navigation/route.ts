@@ -10,12 +10,23 @@ export const runtime = 'edge'
 export async function GET(request: Request) {
   try {
     const data = await getFileContent('src/navsphere/content/navigation.json') as NavigationDataRaw
+    const isAuthenticated = await isAuthenticatedRequest(request)
 
-    if (await isAuthenticatedRequest(request)) {
-      return NextResponse.json(data)
+    if (isAuthenticated) {
+      return NextResponse.json(data, {
+        headers: {
+          'Cache-Control': 'private, no-store',
+          'Vary': 'Cookie',
+        },
+      })
     }
 
-    return NextResponse.json(filterNavigationData(processNavigationData(data)))
+    return NextResponse.json(filterNavigationData(processNavigationData(data)), {
+      headers: {
+        'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
+        'Vary': 'Cookie',
+      },
+    })
   } catch (error) {
     console.error('Failed to fetch navigation data:', error)
     // 返回默认数据结构

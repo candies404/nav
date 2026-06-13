@@ -9,15 +9,19 @@ export const runtime = 'edge'
 export async function GET(request: Request) {
   try {
     const navigationData = await getFileContent('src/navsphere/content/navigation.json') as NavigationDataRaw
+    const isAuthenticated = await isAuthenticatedRequest(request)
     const filteredNavigationData = filterNavigationData(
       processNavigationData(navigationData),
-      await isAuthenticatedRequest(request)
+      isAuthenticated
     )
 
     return NextResponse.json(filteredNavigationData, {
       headers: {
-        'Cache-Control': 's-maxage=3600, stale-while-revalidate',
+        'Cache-Control': isAuthenticated
+          ? 'private, no-store'
+          : 'public, s-maxage=3600, stale-while-revalidate=86400',
         'Content-Type': 'application/json',
+        'Vary': 'Cookie',
       },
     })
   } catch (error) {

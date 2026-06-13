@@ -9,13 +9,51 @@ import { Button } from '@/registry/new-york/ui/button'
 import { ScrollArea } from '@/registry/new-york/ui/scroll-area'
 import type { NavigationData } from '@/types/navigation'
 import type { SiteConfig } from '@/types/site'
-import * as LucideIcons from 'lucide-react'
-import { ChevronDown, ChevronRight, X } from 'lucide-react'
+import {
+  Book,
+  BookOpen,
+  Box,
+  Brain,
+  Building,
+  ChevronDown,
+  ChevronRight,
+  Code,
+  Coffee,
+  Database,
+  Edit,
+  FileText,
+  Files,
+  Folder,
+  Globe,
+  Laptop,
+  Star,
+  Video,
+  X,
+  type LucideIcon,
+} from 'lucide-react'
 
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
   navigationData: NavigationData
   siteInfo: SiteConfig
   onClose?: () => void
+}
+
+const SIDEBAR_ICONS: Record<string, LucideIcon> = {
+  Book,
+  BookOpen,
+  Box,
+  Brain,
+  Building,
+  Code,
+  Coffee,
+  Database,
+  Edit,
+  FileText,
+  Files,
+  Folder,
+  Laptop,
+  Star,
+  Video,
 }
 
 export function Sidebar({ className, navigationData, siteInfo, onClose }: SidebarProps) {
@@ -43,7 +81,7 @@ export function Sidebar({ className, navigationData, siteInfo, onClose }: Sideba
   }
 
   const renderIcon = (iconName?: string) => {
-    if (!iconName) return <LucideIcons.Folder className="h-4 w-4" />;
+    if (!iconName) return <Folder className="h-4 w-4" />;
 
     if (iconName.startsWith('/') || iconName.startsWith('http')) {
       return (
@@ -57,8 +95,7 @@ export function Sidebar({ className, navigationData, siteInfo, onClose }: Sideba
       );
     }
 
-    // Convert icon name to match Lucide icon component name
-    const IconComponent = (LucideIcons as unknown as Record<string, React.ComponentType<{ className?: string }>>)[iconName] || LucideIcons.Folder;
+    const IconComponent = SIDEBAR_ICONS[iconName] || Folder;
     return <IconComponent className="h-4 w-4" />;
   }
 
@@ -90,7 +127,7 @@ export function Sidebar({ className, navigationData, siteInfo, onClose }: Sideba
               className="h-6 w-6"
             />
           ) : (
-            <LucideIcons.Globe className="h-6 w-6" />
+            <Globe className="h-6 w-6" />
           )}
           <span className="truncate">{siteInfo.basic.title}</span>
         </Link>
