@@ -399,14 +399,14 @@ export default function DataManagementPage() {
 
 
       {/* 操作面板 */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <Card className="flex items-center">
+        <CardContent className="w-full pb-6 pt-6 sm:pb-6 sm:pt-6">
+          <div className="grid items-center gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <Button
               onClick={loadNavigationData}
               disabled={isLoading}
               variant="outline"
-              className="h-12"
+              className="h-12 w-full"
             >
               <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
               刷新数据
@@ -417,7 +417,7 @@ export default function DataManagementPage() {
                 <Button
                   variant="outline"
                   disabled={isLoading || !defaultFileStatus.exists || !defaultFileStatus.valid}
-                  className="h-12 relative"
+                  className="relative h-12 w-full"
                 >
                   <AlertTriangle className="mr-2 h-4 w-4 text-orange-500" />
                   恢复初始化
@@ -488,7 +488,7 @@ export default function DataManagementPage() {
             <Button
               onClick={saveData}
               disabled={isSaving || isLoading || !isJsonValid}
-              className="h-12"
+              className="h-12 w-full"
             >
               <Save className={`mr-2 h-4 w-4 ${isSaving ? 'animate-spin' : ''}`} />
               保存数据
@@ -498,7 +498,7 @@ export default function DataManagementPage() {
               onClick={downloadData}
               disabled={isLoading || !isJsonValid}
               variant="outline"
-              className="h-12"
+              className="h-12 w-full"
             >
               <Download className="mr-2 h-4 w-4" />
               下载
@@ -508,7 +508,7 @@ export default function DataManagementPage() {
               onClick={triggerFileUpload}
               disabled={isLoading}
               variant="outline"
-              className="h-12"
+              className="h-12 w-full"
             >
               <Upload className="mr-2 h-4 w-4" />
               上传文件

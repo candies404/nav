@@ -1,5 +1,6 @@
 'use client'
 
+import { installAdminUnauthorizedRedirect } from '@/lib/admin-unauthorized-redirect'
 import { useState, type ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
@@ -106,6 +107,8 @@ const menuItems = [
     icon: Settings,
   },
 ]
+
+installAdminUnauthorizedRedirect()
 
 export function AdminLayoutClient({ children, user }: AdminLayoutClientProps) {
   const pathname = usePathname()
