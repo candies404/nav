@@ -56,6 +56,7 @@
     "@tailwindcss/postcss": "^4.1.12",
     "@tanstack/react-query": "^5.62.2",
     "@tanstack/react-table": "^8.20.5",
+    "@vercel/blob": "^2.4.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.0.4",

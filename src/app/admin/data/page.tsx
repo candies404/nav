@@ -17,7 +17,8 @@ import {
   CheckCircle,
   XCircle,
   Info,
-  Upload
+  Upload,
+  CloudUpload
 } from "lucide-react"
 import {
   Dialog,
@@ -34,6 +35,7 @@ export default function DataManagementPage() {
   const [navigationData, setNavigationData] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [isCachingIcons, setIsCachingIcons] = useState(false)
   const [isRestoreDialogOpen, setIsRestoreDialogOpen] = useState(false)
   const [isJsonValid, setIsJsonValid] = useState(true)
   const [jsonError, setJsonError] = useState('')
@@ -204,6 +206,40 @@ export default function DataManagementPage() {
       })
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const cacheFavicons = async () => {
+    setIsCachingIcons(true)
+    try {
+      const response = await fetch('/api/admin/favicon-cache', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ limit: 80 }),
+      })
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.details || result.error || '图标缓存失败')
+      }
+
+      await loadNavigationData()
+
+      toast({
+        title: "完成",
+        description: `已处理 ${result.processed} 个，更新 ${result.updated} 个，失败 ${result.failed} 个${result.remaining > 0 ? `，剩余 ${result.remaining} 个可继续处理` : ''}`,
+      })
+    } catch (error) {
+      console.error('Cache favicons error:', error)
+      toast({
+        title: "错误",
+        description: (error as Error).message || "图标缓存失败",
+        variant: "destructive",
+      })
+    } finally {
+      setIsCachingIcons(false)
     }
   }
 
@@ -401,7 +437,7 @@ export default function DataManagementPage() {
       {/* 操作面板 */}
       <Card className="flex items-center">
         <CardContent className="w-full pb-6 pt-6 sm:pb-6 sm:pt-6">
-          <div className="grid items-center gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          <div className="grid items-center gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             <Button
               onClick={loadNavigationData}
               disabled={isLoading}
@@ -512,6 +548,16 @@ export default function DataManagementPage() {
             >
               <Upload className="mr-2 h-4 w-4" />
               上传文件
+            </Button>
+
+            <Button
+              onClick={cacheFavicons}
+              disabled={isLoading || isSaving || isCachingIcons}
+              variant="outline"
+              className="h-12 w-full"
+            >
+              <CloudUpload className={`mr-2 h-4 w-4 ${isCachingIcons ? 'animate-spin' : ''}`} />
+              缓存图标
             </Button>
           </div>
 

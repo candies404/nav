@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { saveAsset } from '@/lib/storage'
+import { cacheFaviconForUrl, googleFaviconUrl } from '@/lib/favicon-cache'
 
 export const runtime = 'edge'
 
@@ -11,7 +11,6 @@ interface WebsiteMetadata {
 }
 
 const METADATA_TIMEOUT_MS = 1500
-const ICON_MIRROR_TIMEOUT_MS = 2000
 
 export async function POST(request: Request) {
   try {
@@ -27,12 +26,20 @@ export async function POST(request: Request) {
 
     const metadata = await fetchWebsiteMetadata(url)
 
-    // Metadata is useful immediately; favicon mirroring is kept short so adding a site never blocks for many seconds.
-    if (metadata.icon && !isGoogleFaviconUrl(metadata.icon)) {
+    // Metadata is useful immediately; favicon mirroring is cached by domain so repeated links share one stored icon.
+    if (metadata.icon) {
       try {
-        metadata.icon = await mirrorIcon(metadata.icon, url)
+        const cachedFavicon = await cacheFaviconForUrl({
+          href: url,
+          iconUrl: metadata.icon,
+          referer: url,
+        })
+
+        if (cachedFavicon) {
+          metadata.icon = cachedFavicon.icon
+        }
       } catch (error) {
-        console.warn('Failed to mirror favicon:', error)
+        console.warn('Failed to cache favicon:', error)
       }
     }
 
@@ -158,50 +165,6 @@ function extractFavicon(html: string, baseUrl: string) {
   }
 
   return null
-}
-
-async function mirrorIcon(iconUrl: string, referer: string) {
-  const response = await fetch(iconUrl, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 AppleWebKit/537.36 Chrome/138 Safari/537.36',
-      Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-      Referer: referer,
-    },
-    redirect: 'follow',
-    signal: AbortSignal.timeout(ICON_MIRROR_TIMEOUT_MS),
-  })
-
-  if (!response.ok) {
-    throw new Error(`Favicon request failed: ${response.status}`)
-  }
-
-  const binaryData = new Uint8Array(await response.arrayBuffer())
-  const { path } = await saveAsset(binaryData, getFileExtension(iconUrl), 'favicon', 'assets')
-  return path
-}
-
-function googleFaviconUrl(hostname: string) {
-  return `https://www.google.com/s2/favicons?sz=128&domain=${hostname}`
-}
-
-function isGoogleFaviconUrl(url: string) {
-  try {
-    const parsed = new URL(url)
-    return parsed.hostname === 'www.google.com' && parsed.pathname.startsWith('/s2/favicons')
-  } catch {
-    return false
-  }
-}
-
-function getFileExtension(url: string) {
-  try {
-    const extension = new URL(url).pathname.split('.').pop()?.toLowerCase()
-    return extension && ['png', 'jpg', 'jpeg', 'gif', 'svg', 'ico', 'webp'].includes(extension)
-      ? extension
-      : 'png'
-  } catch {
-    return 'png'
-  }
 }
 
 function decodeHtml(value: string) {

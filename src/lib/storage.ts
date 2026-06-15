@@ -3,6 +3,7 @@ import navigationDefaultData from '@/navsphere/content/navigation-default.json'
 import resourceMetadataData from '@/navsphere/content/resource-metadata.json'
 import siteData from '@/navsphere/content/site.json'
 import { uint8ArrayToBase64 } from '@/lib/buffer-utils'
+import { put } from '@vercel/blob'
 
 type RedisResponse<T> = {
   result?: T
@@ -27,6 +28,7 @@ export type StoredAsset = {
 const DATA_PREFIX = process.env.UPSTASH_REDIS_KEY_PREFIX || 'navsphere'
 const DATA_CACHE_TTL_MS = Number(process.env.NAVSPHERE_DATA_CACHE_TTL_MS || 60_000)
 const DATA_ERROR_CACHE_TTL_MS = Number(process.env.NAVSPHERE_DATA_ERROR_CACHE_TTL_MS || 5_000)
+const BLOB_CACHE_MAX_AGE_SECONDS = Number(process.env.NAVSPHERE_BLOB_CACHE_MAX_AGE_SECONDS || 31_536_000)
 const globalCache = globalThis as typeof globalThis & {
   __navsphereDataCache?: Map<string, DataCacheEntry>
   __navsphereRedisConfigWarned?: boolean
@@ -145,6 +147,10 @@ function assetKey(id: string) {
   return `${DATA_PREFIX}:asset:${id}`
 }
 
+function faviconCacheKey(domain: string) {
+  return `${DATA_PREFIX}:favicon:${domain.toLowerCase()}`
+}
+
 function contentTypeFromExtension(extension: string) {
   const ext = extension.toLowerCase().replace(/^\./, '')
 
@@ -160,6 +166,17 @@ function contentTypeFromExtension(extension: string) {
 function normalizeExtension(extension: string) {
   const ext = extension.toLowerCase().replace(/^\./, '')
   return ext || 'png'
+}
+
+function hasBlobWriteConfig() {
+  return Boolean(
+    process.env.BLOB_READ_WRITE_TOKEN ||
+    (process.env.BLOB_STORE_ID && process.env.VERCEL)
+  )
+}
+
+export function isBlobStorageConfigured() {
+  return hasBlobWriteConfig()
 }
 
 export async function getFileContent(path: string) {
@@ -237,10 +254,28 @@ export async function saveAsset(
   const ext = normalizeExtension(extension)
   const cleanPrefix = prefix.replace(/[^a-zA-Z0-9_-]/g, '') || 'asset'
   const cleanFolder = folder.replace(/^\/+|\/+$/g, '').replace(/[\\/]+/g, '_') || 'assets'
+  const contentType = contentTypeFromExtension(ext)
+
+  if (hasBlobWriteConfig()) {
+    const pathname = `${cleanFolder}/${cleanPrefix}_${Date.now()}_${crypto.randomUUID()}.${ext}`
+    const blob = await put(pathname, binaryData, {
+      access: 'public',
+      addRandomSuffix: false,
+      contentType,
+      cacheControlMaxAge: BLOB_CACHE_MAX_AGE_SECONDS,
+      storeId: process.env.BLOB_STORE_ID,
+    })
+
+    return {
+      path: blob.url,
+      hash: blob.pathname,
+    }
+  }
+
   const id = `${cleanFolder}_${cleanPrefix}_${Date.now()}_${crypto.randomUUID()}.${ext}`
   const asset: StoredAsset = {
     id,
-    contentType: contentTypeFromExtension(ext),
+    contentType,
     base64: uint8ArrayToBase64(binaryData),
     createdAt: new Date().toISOString(),
   }
@@ -259,4 +294,26 @@ export async function getAsset(id: string): Promise<StoredAsset | null> {
   if (!raw) return null
 
   return JSON.parse(raw) as StoredAsset
+}
+
+export async function getCachedFavicon(domain: string): Promise<string | null> {
+  try {
+    return await redisCommand<string>(['GET', faviconCacheKey(domain)])
+  } catch (error) {
+    if (!isMissingRedisConfigError(error)) {
+      console.warn('Failed to read favicon cache:', error)
+    }
+
+    return null
+  }
+}
+
+export async function setCachedFavicon(domain: string, iconUrl: string) {
+  try {
+    await redisCommand<string>(['SET', faviconCacheKey(domain), iconUrl])
+  } catch (error) {
+    if (!isMissingRedisConfigError(error)) {
+      console.warn('Failed to write favicon cache:', error)
+    }
+  }
 }
