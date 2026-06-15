@@ -36,7 +36,9 @@ export function NavigationCard({ item, siteConfig }: NavigationCardProps) {
               </div>
             )}
             <div className="min-w-0 space-y-0.5 sm:space-y-1">
-              <CardTitle className="break-words text-sm leading-snug sm:text-base">{item.title}</CardTitle>
+              <CardTitle className="line-clamp-1 break-words text-sm leading-snug sm:text-base">
+                {item.title}
+              </CardTitle>
               {item.description && (
                 <CardDescription className="line-clamp-2 text-xs leading-snug sm:line-clamp-1 sm:text-sm">
                   {item.description}
