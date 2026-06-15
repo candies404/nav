@@ -12,7 +12,6 @@ import {
   ChevronRight,
   Database,
   Home,
-  Inbox,
   LayoutDashboard,
   ListTodo,
   LogOut,
@@ -75,11 +74,6 @@ const menuItems = [
         href: '/admin/sitelist',
       },
     ],
-  },
-  {
-    title: '投稿审核',
-    href: '/admin/submissions',
-    icon: Inbox,
   },
   {
     title: '资源管理',

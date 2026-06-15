@@ -8,7 +8,7 @@ import { Sidebar } from '@/components/sidebar'
 import { SearchBar } from '@/components/search-bar'
 import { ModeToggle } from '@/components/mode-toggle'
 import { Footer } from '@/components/footer'
-import { Github, Menu, Send } from 'lucide-react'
+import { Github, Menu } from 'lucide-react'
 import { Button } from "@/registry/new-york/ui/button"
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
@@ -125,18 +125,6 @@ export function NavigationContent({ navigationData, siteData }: NavigationConten
               />
             </div>
             <div className="flex items-center gap-1">
-              <Link
-                href="/submit"
-                aria-label="投稿网站"
-              >
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9 hover:bg-accent hover:text-accent-foreground sm:h-10 sm:w-10"
-                >
-                  <Send className="h-5 w-5" />
-                </Button>
-              </Link>
               <ModeToggle />
               <Link
                 href="https://github.com/tianyaxiang/NavSphere"
