@@ -848,13 +848,17 @@ export default function SiteListPage() {
     const truncated = isLong ? description.substring(0, maxLength) + '...' : description
 
     if (!isLong) {
-      return <span className="text-sm">{description}</span>
+      return (
+        <span className="block max-w-full truncate text-sm" title={description}>
+          {description}
+        </span>
+      )
     }
 
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="text-sm cursor-help hover:text-primary transition-colors">
+          <span className="block max-w-full cursor-help truncate text-sm transition-colors hover:text-primary">
             {truncated}
           </span>
         </TooltipTrigger>
@@ -1593,10 +1597,10 @@ export default function SiteListPage() {
         ) : isLoading ? (
           <div className="opacity-50 pointer-events-none">
             <div className="rounded-md border">
-              <Table>
+              <Table className="min-w-[980px] table-fixed">
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[50px]">
+                    <TableHead className="w-12">
                       <Checkbox
                         checked={
                           filteredSites.length > 0 &&
@@ -1606,62 +1610,68 @@ export default function SiteListPage() {
                         aria-label="Select all"
                       />
                     </TableHead>
-                    <TableHead className="w-[200px]">名称</TableHead>
-                    <TableHead className="w-[250px]">链接</TableHead>
-                    <TableHead className="w-[120px]">一级分类</TableHead>
-                    <TableHead className="w-[120px]">二级分类</TableHead>
-                    <TableHead className="w-[200px]">描述</TableHead>
-                    <TableHead className="w-[90px]">状态</TableHead>
-                    <TableHead className="w-[120px]">操作</TableHead>
+                    <TableHead className="w-[30%]">名称</TableHead>
+                    <TableHead className="w-[22%]">链接</TableHead>
+                    <TableHead className="w-[10%]">一级分类</TableHead>
+                    <TableHead className="w-[10%]">二级分类</TableHead>
+                    <TableHead className="w-[16%]">描述</TableHead>
+                    <TableHead className="w-20">状态</TableHead>
+                    <TableHead className="w-24 text-right">操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredSites.map((site) => (
                     <TableRow key={site.id}>
-                      <TableCell>
+                      <TableCell className="w-12">
                         <Checkbox
                           checked={selectedSites.includes(site.id)}
                           onCheckedChange={(checked) => handleSelectOne(checked, site.id)}
                           aria-label={`Select ${site.name}`}
                         />
                       </TableCell>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
+                      <TableCell className="min-w-0 font-medium">
+                        <div className="flex min-w-0 items-center gap-2">
                           {getSiteCategoryInfo(site.id).categoryName && (
-                            <div className="w-2 h-2 rounded-full bg-primary/20"></div>
+                            <div className="h-2 w-2 flex-shrink-0 rounded-full bg-primary/20"></div>
                           )}
-                          <span className="truncate">{site.name}</span>
+                          <span className="block min-w-0 truncate" title={site.name}>{site.name}</span>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="min-w-0">
                         <a
                           href={site.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-blue-500 hover:text-blue-700 hover:underline text-sm truncate block max-w-[230px]"
+                          className="block min-w-0 truncate text-sm text-blue-500 hover:text-blue-700 hover:underline"
                           title={site.url}
                         >
                           {site.url}
                         </a>
                       </TableCell>
-                      <TableCell>
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                      <TableCell className="min-w-0">
+                        <span
+                          className="inline-block max-w-full truncate rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                          title={getSiteCategoryInfo(site.id).categoryName || '-'}
+                        >
                           {getSiteCategoryInfo(site.id).categoryName || '-'}
                         </span>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="min-w-0">
                         {getSiteCategoryInfo(site.id).subCategoryName ? (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                          <span
+                            className="inline-block max-w-full truncate rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-800 dark:bg-green-900 dark:text-green-200"
+                            title={getSiteCategoryInfo(site.id).subCategoryName}
+                          >
                             {getSiteCategoryInfo(site.id).subCategoryName}
                           </span>
                         ) : (
                           <span className="text-muted-foreground text-xs">-</span>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="min-w-0">
                         <DescriptionCell description={site.description} />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="w-20">
                         {site.isPrivate ? (
                           <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300">
                             私密
@@ -1670,8 +1680,8 @@ export default function SiteListPage() {
                           <span className="text-muted-foreground text-xs">公开</span>
                         )}
                       </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
+                      <TableCell className="w-24">
+                        <div className="flex items-center justify-end gap-2">
                           <Button
                             variant="ghost"
                             size="icon"
@@ -1700,10 +1710,10 @@ export default function SiteListPage() {
           </div>
         ) : filteredSites.length > 0 ? (
           <div className="rounded-md border">
-            <Table>
+            <Table className="min-w-[980px] table-fixed">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[50px]">
+                  <TableHead className="w-12">
                     <Checkbox
                       checked={
                         filteredSites.length > 0 &&
@@ -1713,62 +1723,68 @@ export default function SiteListPage() {
                       aria-label="Select all"
                     />
                   </TableHead>
-                  <TableHead className="w-[200px]">名称</TableHead>
-                  <TableHead className="w-[250px]">链接</TableHead>
-                  <TableHead className="w-[120px]">一级分类</TableHead>
-                  <TableHead className="w-[120px]">二级分类</TableHead>
-                  <TableHead className="w-[200px]">描述</TableHead>
-                  <TableHead className="w-[90px]">状态</TableHead>
-                  <TableHead className="w-[120px]">操作</TableHead>
+                  <TableHead className="w-[30%]">名称</TableHead>
+                  <TableHead className="w-[22%]">链接</TableHead>
+                  <TableHead className="w-[10%]">一级分类</TableHead>
+                  <TableHead className="w-[10%]">二级分类</TableHead>
+                  <TableHead className="w-[16%]">描述</TableHead>
+                  <TableHead className="w-20">状态</TableHead>
+                  <TableHead className="w-24 text-right">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredSites.map((site) => (
                   <TableRow key={site.id}>
-                    <TableCell>
+                    <TableCell className="w-12">
                       <Checkbox
                         checked={selectedSites.includes(site.id)}
                         onCheckedChange={(checked) => handleSelectOne(checked, site.id)}
                         aria-label={`Select ${site.name}`}
                       />
                     </TableCell>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
+                    <TableCell className="min-w-0 font-medium">
+                      <div className="flex min-w-0 items-center gap-2">
                         {getSiteCategoryInfo(site.id).categoryName && (
-                          <div className="w-2 h-2 rounded-full bg-primary/20"></div>
+                          <div className="h-2 w-2 flex-shrink-0 rounded-full bg-primary/20"></div>
                         )}
-                        <span className="truncate">{site.name}</span>
+                        <span className="block min-w-0 truncate" title={site.name}>{site.name}</span>
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="min-w-0">
                       <a
                         href={site.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-500 hover:text-blue-700 hover:underline text-sm truncate block max-w-[230px]"
+                        className="block min-w-0 truncate text-sm text-blue-500 hover:text-blue-700 hover:underline"
                         title={site.url}
                       >
                         {site.url}
                       </a>
                     </TableCell>
-                    <TableCell>
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                    <TableCell className="min-w-0">
+                      <span
+                        className="inline-block max-w-full truncate rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                        title={getSiteCategoryInfo(site.id).categoryName || '-'}
+                      >
                         {getSiteCategoryInfo(site.id).categoryName || '-'}
                       </span>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="min-w-0">
                       {getSiteCategoryInfo(site.id).subCategoryName ? (
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                        <span
+                          className="inline-block max-w-full truncate rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-800 dark:bg-green-900 dark:text-green-200"
+                          title={getSiteCategoryInfo(site.id).subCategoryName}
+                        >
                           {getSiteCategoryInfo(site.id).subCategoryName}
                         </span>
                       ) : (
                         <span className="text-muted-foreground text-xs">-</span>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="min-w-0">
                       <DescriptionCell description={site.description} />
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="w-20">
                       {site.isPrivate ? (
                         <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300">
                           私密
@@ -1777,8 +1793,8 @@ export default function SiteListPage() {
                         <span className="text-muted-foreground text-xs">公开</span>
                       )}
                     </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
+                    <TableCell className="w-24">
+                      <div className="flex items-center justify-end gap-2">
                         <Button
                           variant="ghost"
                           size="icon"
