@@ -214,10 +214,6 @@ export default function DataManagementPage() {
     try {
       const response = await fetch('/api/admin/favicon-cache', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ limit: 80 }),
       })
       const result = await response.json()
 
@@ -225,11 +221,21 @@ export default function DataManagementPage() {
         throw new Error(result.details || result.error || '图标缓存失败')
       }
 
+      if (result.started) {
+        toast({
+          title: "已启动",
+          description: `图标缓存任务已在后台启动，共 ${result.queued} 个待处理。稍后刷新数据可查看缓存后的图标地址。`,
+        })
+        return
+      }
+
       await loadNavigationData()
 
       toast({
-        title: "完成",
-        description: `已处理 ${result.processed} 个，更新 ${result.updated} 个，失败 ${result.failed} 个${result.remaining > 0 ? `，剩余 ${result.remaining} 个可继续处理` : ''}`,
+        title: result.message || "完成",
+        description: result.processed !== undefined
+          ? `已处理 ${result.processed} 个，更新 ${result.updated} 个，失败 ${result.failed} 个${result.remaining > 0 ? `，剩余 ${result.remaining} 个可继续处理` : ''}`
+          : `当前共有 ${result.totalCandidates || 0} 个候选图标`,
       })
     } catch (error) {
       console.error('Cache favicons error:', error)

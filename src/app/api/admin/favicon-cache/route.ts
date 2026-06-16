@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { after, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import {
   cacheFaviconForUrl,
@@ -15,9 +15,9 @@ import {
 import type { NavigationData, NavigationItem, NavigationSubItem } from '@/types/navigation'
 
 export const runtime = 'edge'
+export const maxDuration = 300
 
 const NAVIGATION_PATH = 'src/navsphere/content/navigation.json'
-const DEFAULT_BATCH_LIMIT = Number(process.env.NAVSPHERE_FAVICON_BATCH_LIMIT || 80)
 const BATCH_CONCURRENCY = Number(process.env.NAVSPHERE_FAVICON_BATCH_CONCURRENCY || 6)
 
 type FaviconBatchOptions = {
@@ -29,6 +29,24 @@ type ItemRef = {
   item: NavigationSubItem
 }
 
+type FaviconCacheJob = {
+  data: NavigationData
+  selected: ItemRef[]
+  totalCandidates: number
+}
+
+type FaviconCacheResult = {
+  success: true
+  storage: 'blob' | 'kv'
+  processed: number
+  updated: number
+  cacheHits: number
+  uploaded: number
+  failed: number
+  remaining: number
+  errors: Array<{ title: string, href: string, error: string }>
+}
+
 export async function POST(request: Request) {
   try {
     const session = await auth()
@@ -37,81 +55,128 @@ export async function POST(request: Request) {
     }
 
     const options = await readOptions(request)
-    const limit = normalizeLimit(options.limit)
-    const data = await getFileContent(NAVIGATION_PATH) as NavigationData
-    const allItems = collectItems(data.navigationItems || [])
-    const candidates = allItems.filter(({ item }) => shouldCacheIcon(item, Boolean(options.force)))
-    const selected = candidates.slice(0, limit)
-    const errors: Array<{ title: string, href: string, error: string }> = []
+    const job = await createFaviconCacheJob(options)
 
-    let updated = 0
-    let cacheHits = 0
-    let uploaded = 0
-    let cursor = 0
+    if (job.selected.length === 0) {
+      return NextResponse.json({
+        success: true,
+        started: false,
+        storage: isBlobStorageConfigured() ? 'blob' : 'kv',
+        queued: 0,
+        totalCandidates: job.totalCandidates,
+        remaining: 0,
+        message: '没有需要缓存的图标',
+      })
+    }
 
-    async function worker() {
-      while (cursor < selected.length) {
-        const { item } = selected[cursor++]
-
-        try {
-          const result = await cacheFaviconForUrl({
-            href: item.href,
-            iconUrl: item.icon,
-            domain: getDomainFromFaviconProxy(item.icon) || getDomainFromUrl(item.href),
-          })
-
-          if (!result) continue
-
-          if (item.icon !== result.icon) {
-            item.icon = result.icon
-            updated += 1
-          }
-
-          if (result.cached) {
-            cacheHits += 1
-          } else {
-            uploaded += 1
-          }
-        } catch (error) {
-          errors.push({
-            title: item.title,
-            href: item.href,
-            error: error instanceof Error ? error.message : String(error),
-          })
-        }
+    after(async () => {
+      try {
+        const result = await runFaviconCacheJob(job)
+        console.info('Favicon cache background job completed:', result)
+      } catch (error) {
+        console.error('Favicon cache background job failed:', error)
       }
-    }
-
-    await Promise.all(Array.from({ length: Math.min(BATCH_CONCURRENCY, selected.length) }, worker))
-
-    if (updated > 0) {
-      await commitFile(
-        NAVIGATION_PATH,
-        JSON.stringify(data, null, 2),
-        'Cache navigation favicons'
-      )
-    }
-
-    return NextResponse.json({
-      success: true,
-      storage: isBlobStorageConfigured() ? 'blob' : 'kv',
-      processed: selected.length,
-      updated,
-      cacheHits,
-      uploaded,
-      failed: errors.length,
-      remaining: Math.max(candidates.length - selected.length, 0),
-      errors: errors.slice(0, 10),
     })
-  } catch (error) {
-    console.error('Failed to cache favicons:', error)
+
     return NextResponse.json(
       {
-        error: getStorageErrorMessage(error, 'Failed to cache favicons'),
+        success: true,
+        started: true,
+        storage: isBlobStorageConfigured() ? 'blob' : 'kv',
+        queued: job.selected.length,
+        totalCandidates: job.totalCandidates,
+        remaining: Math.max(job.totalCandidates - job.selected.length, 0),
+        message: '图标缓存任务已在后台启动',
+      },
+      { status: 202 }
+    )
+  } catch (error) {
+    console.error('Failed to start favicon cache job:', error)
+    return NextResponse.json(
+      {
+        error: getStorageErrorMessage(error, 'Failed to start favicon cache job'),
         details: error instanceof Error ? error.message : String(error),
       },
       { status: 500 }
     )
+  }
+}
+
+async function createFaviconCacheJob(options: FaviconBatchOptions): Promise<FaviconCacheJob> {
+  const data = await getFileContent(NAVIGATION_PATH) as NavigationData
+  const allItems = collectItems(data.navigationItems || [])
+  const candidates = allItems.filter(({ item }) => shouldCacheIcon(item, Boolean(options.force)))
+  const limit = normalizeLimit(options.limit, candidates.length)
+  const selected = candidates.slice(0, limit)
+
+  return {
+    data,
+    selected,
+    totalCandidates: candidates.length,
+  }
+}
+
+async function runFaviconCacheJob(job: FaviconCacheJob): Promise<FaviconCacheResult> {
+  const errors: Array<{ title: string, href: string, error: string }> = []
+
+  let updated = 0
+  let cacheHits = 0
+  let uploaded = 0
+  let cursor = 0
+
+  async function worker() {
+    while (cursor < job.selected.length) {
+      const { item } = job.selected[cursor++]
+
+      try {
+        const result = await cacheFaviconForUrl({
+          href: item.href,
+          iconUrl: item.icon,
+          domain: getDomainFromFaviconProxy(item.icon) || getDomainFromUrl(item.href),
+        })
+
+        if (!result) continue
+
+        if (item.icon !== result.icon) {
+          item.icon = result.icon
+          updated += 1
+        }
+
+        if (result.cached) {
+          cacheHits += 1
+        } else {
+          uploaded += 1
+        }
+      } catch (error) {
+        errors.push({
+          title: item.title,
+          href: item.href,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(BATCH_CONCURRENCY, job.selected.length) }, worker))
+
+  if (updated > 0) {
+    await commitFile(
+      NAVIGATION_PATH,
+      JSON.stringify(job.data, null, 2),
+      'Cache navigation favicons'
+    )
+  }
+
+  return {
+    success: true,
+    storage: isBlobStorageConfigured() ? 'blob' : 'kv',
+    processed: job.selected.length,
+    updated,
+    cacheHits,
+    uploaded,
+    failed: errors.length,
+    remaining: Math.max(job.totalCandidates - job.selected.length, 0),
+    errors: errors.slice(0, 10),
   }
 }
 
@@ -125,11 +190,13 @@ async function readOptions(request: Request): Promise<FaviconBatchOptions> {
   }
 }
 
-function normalizeLimit(value: unknown) {
-  const parsed = typeof value === 'number' ? value : DEFAULT_BATCH_LIMIT
-  if (!Number.isFinite(parsed)) return DEFAULT_BATCH_LIMIT
+function normalizeLimit(value: unknown, total: number) {
+  if (value === undefined || value === null || value === 'all') return total
 
-  return Math.min(Math.max(Math.floor(parsed), 1), 300)
+  const parsed = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(parsed)) return total
+
+  return Math.min(Math.max(Math.floor(parsed), 1), total)
 }
 
 function collectItems(items: NavigationItem[]) {
