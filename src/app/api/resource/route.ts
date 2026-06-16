@@ -1,31 +1,25 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { commitFile, getFileContent, saveAsset } from '@/lib/storage'
-import type { ResourceMetadata } from '@/types/resource-metadata'
+import {
+    deleteManagedResources,
+    listManagedResources,
+    MISSING_BLOB_CONFIG_MESSAGE,
+    uploadManagedResource,
+} from '@/lib/resource-storage'
 
 export const runtime = 'edge'
 
-const RESOURCE_METADATA_PATH = 'src/navsphere/content/resource-metadata.json'
-
-function ensureResourceMetadata(data: ResourceMetadata | Record<string, never>): ResourceMetadata {
-    if ('metadata' in data && Array.isArray(data.metadata)) {
-        return data as ResourceMetadata
-    }
-
-    return {
-        commit: '',
-        generated: new Date().toISOString(),
-        metadata: []
-    }
-}
-
 export async function GET() {
     try {
-        const data = ensureResourceMetadata(await getFileContent(RESOURCE_METADATA_PATH) as ResourceMetadata)
-        return NextResponse.json(data)
+        const session = await auth()
+        if (!session?.user) {
+            return new Response('Unauthorized', { status: 401 })
+        }
+
+        return NextResponse.json(await listManagedResources())
     } catch (error) {
-        console.error('Failed to fetch resource metadata:', error)
-        return NextResponse.json({ error: 'Failed to fetch resource metadata' }, { status: 500 })
+        console.error('Failed to fetch resources:', error)
+        return handleResourceError(error, 'Failed to fetch resources')
     }
 }
 
@@ -37,34 +31,12 @@ export async function POST(request: Request) {
         }
 
         const { image, folder = 'assets', prefix = 'img' } = await request.json()
-        if (typeof image !== 'string' || !image.includes(',')) {
-            return NextResponse.json({ error: 'Invalid image payload' }, { status: 400 })
-        }
-
-        const base64Data = image.split(',')[1]
-        const binaryData = Uint8Array.from(atob(base64Data), char => char.charCodeAt(0))
-        const uploadResult = await saveAsset(binaryData, 'png', prefix, folder)
-
-        const metadata = ensureResourceMetadata(await getFileContent(RESOURCE_METADATA_PATH) as ResourceMetadata)
-        metadata.generated = new Date().toISOString()
-        metadata.metadata.unshift({
-            commit: uploadResult.hash,
-            hash: uploadResult.hash,
-            path: uploadResult.path
-        })
-
-        await commitFile(
-            RESOURCE_METADATA_PATH,
-            JSON.stringify(metadata, null, 2),
-            'Update resource metadata'
-        )
-
-        return NextResponse.json({ success: true, imageUrl: uploadResult.path })
+        return NextResponse.json(await uploadManagedResource({ image, folder, prefix }))
     } catch (error) {
-        console.error('Failed to save resource metadata:', error)
+        console.error('Failed to upload resource:', error)
         return NextResponse.json(
-            { error: error instanceof Error ? error.message : 'Failed to save resource metadata' },
-            { status: 500 }
+            { error: error instanceof Error ? error.message : 'Failed to upload resource' },
+            { status: isBadResourceRequest(error) ? 400 : 500 }
         )
     }
 }
@@ -82,28 +54,21 @@ export async function DELETE(request: Request) {
             return NextResponse.json({ error: 'Invalid resource hashes' }, { status: 400 })
         }
 
-        const metadata = ensureResourceMetadata(await getFileContent(RESOURCE_METADATA_PATH) as ResourceMetadata)
-        const originalCount = metadata.metadata.length
-        metadata.metadata = metadata.metadata.filter(item => !resourceHashes.includes(item.hash))
-        metadata.generated = new Date().toISOString()
-        const deletedCount = originalCount - metadata.metadata.length
-
-        await commitFile(
-            RESOURCE_METADATA_PATH,
-            JSON.stringify(metadata, null, 2),
-            `Delete ${deletedCount} resource(s)`
-        )
-
-        return NextResponse.json({
-            success: true,
-            deletedCount,
-            message: `成功删除 ${deletedCount} 个资源`
-        })
+        return NextResponse.json(await deleteManagedResources(resourceHashes))
     } catch (error) {
         console.error('Failed to delete resources:', error)
-        return NextResponse.json(
-            { error: error instanceof Error ? error.message : 'Failed to delete resources' },
-            { status: 500 }
-        )
+        return handleResourceError(error, 'Failed to delete resources')
     }
+}
+
+function handleResourceError(error: unknown, fallbackMessage: string) {
+    const message = error instanceof Error ? error.message : fallbackMessage
+    const status = message === MISSING_BLOB_CONFIG_MESSAGE ? 400 : 500
+
+    return NextResponse.json({ error: message }, { status })
+}
+
+function isBadResourceRequest(error: unknown) {
+    return error instanceof Error &&
+        (error.message === MISSING_BLOB_CONFIG_MESSAGE || error.message === 'Invalid image payload')
 }

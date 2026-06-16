@@ -3,7 +3,7 @@ import navigationDefaultData from '@/navsphere/content/navigation-default.json'
 import resourceMetadataData from '@/navsphere/content/resource-metadata.json'
 import siteData from '@/navsphere/content/site.json'
 import { uint8ArrayToBase64 } from '@/lib/buffer-utils'
-import { put } from '@vercel/blob'
+import { del, list, put } from '@vercel/blob'
 
 type RedisResponse<T> = {
   result?: T
@@ -23,6 +23,14 @@ export type StoredAsset = {
   contentType: string
   base64: string
   createdAt: string
+}
+
+export type BlobAsset = {
+  pathname: string
+  url: string
+  downloadUrl: string
+  size: number
+  uploadedAt: string
 }
 
 const DATA_PREFIX = process.env.UPSTASH_REDIS_KEY_PREFIX || 'navsphere'
@@ -169,14 +177,17 @@ function normalizeExtension(extension: string) {
 }
 
 function hasBlobWriteConfig() {
-  return Boolean(
-    process.env.BLOB_READ_WRITE_TOKEN ||
-    (process.env.BLOB_STORE_ID && process.env.VERCEL)
-  )
+  return Boolean(process.env.BLOB_READ_WRITE_TOKEN)
 }
 
 export function isBlobStorageConfigured() {
   return hasBlobWriteConfig()
+}
+
+function getBlobOptions() {
+  return {
+    storeId: process.env.BLOB_STORE_ID,
+  }
 }
 
 export async function getFileContent(path: string) {
@@ -287,6 +298,45 @@ export async function saveAsset(
     path: `/api/assets/${encodeURIComponent(id)}`,
     hash: id,
   }
+}
+
+export async function listBlobAssets() {
+  if (!hasBlobWriteConfig()) return []
+
+  const blobs: BlobAsset[] = []
+  let cursor: string | undefined
+
+  do {
+    const result = await list({
+      ...getBlobOptions(),
+      cursor,
+      limit: 1000,
+    })
+
+    for (const blob of result.blobs) {
+      blobs.push({
+        pathname: blob.pathname,
+        url: blob.url,
+        downloadUrl: blob.downloadUrl,
+        size: blob.size,
+        uploadedAt: new Date(blob.uploadedAt).toISOString(),
+      })
+    }
+
+    cursor = result.cursor
+  } while (cursor)
+
+  return blobs.sort((a, b) => Date.parse(b.uploadedAt) - Date.parse(a.uploadedAt))
+}
+
+export async function deleteBlobAssets(paths: string[]) {
+  if (!hasBlobWriteConfig()) return 0
+
+  const blobPaths = paths.filter(Boolean)
+  if (blobPaths.length === 0) return 0
+
+  await del(blobPaths, getBlobOptions())
+  return blobPaths.length
 }
 
 export async function getAsset(id: string): Promise<StoredAsset | null> {

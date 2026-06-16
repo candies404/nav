@@ -55,6 +55,7 @@ import {
 } from "@/registry/new-york/ui/tooltip"
 
 import { NavigationSubItem } from '@/types/navigation'
+import { fileToDataUrl, uploadResourceImage } from '@/services/resource-api'
 
 interface SubCategory {
   id: string
@@ -950,29 +951,7 @@ export default function SiteListPage() {
     try {
       setUploading(true)
 
-      // 将文件转换为 base64
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(reader.result as string)
-        reader.onerror = reject
-        reader.readAsDataURL(file)
-      })
-
-      const response = await fetch('/api/resource', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          image: base64
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error(`上传失败: ${response.status} ${response.statusText}`)
-      }
-
-      const data = await response.json()
+      const data = await uploadResourceImage(await fileToDataUrl(file))
 
       if (data.imageUrl) {
         setSite({ ...site, icon: data.imageUrl })

@@ -43,6 +43,15 @@ import {
   FormMessage,
 } from "@/registry/new-york/ui/form"
 import { Toaster } from "@/registry/new-york/ui/toaster"
+import {
+  checkResourceReferences as requestResourceReferences,
+  deleteResources,
+  fileToDataUrl,
+  listResources,
+  type ResourceCardResource,
+  type ResourceReferenceMap,
+  uploadResourceImageWithProgress,
+} from "@/services/resource-api"
 
 const Icons = {
   loader2: Loader2,
@@ -64,24 +73,6 @@ const formSchema = z.object({
   }),
 })
 
-// 假设 ResourceMetadataItem 是 metadata 中每个项的类型
-interface ResourceMetadataItem {
-  hash: string;
-  path: string; // 根据实际结构添加其他属性
-}
-
-// Rename the local declaration
-interface LocalResourceMetadata {
-  id: string;
-  title: string;
-  items: Array<{
-    title: string;
-    description: string;
-    icon: string;
-    url: string;
-  }>;
-}
-
 // 修改骨架屏组件，进一步调整大小
 const ResourceGridSkeleton = () => (
   <div className="grid grid-cols-2 gap-2 min-[420px]:grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10">
@@ -96,6 +87,24 @@ const ResourceGridSkeleton = () => (
     ))}
   </div>
 );
+
+function formatBytes(size?: number) {
+  if (typeof size !== 'number' || !Number.isFinite(size)) return ''
+
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+
+  return `${(size / 1024 / 1024).toFixed(1)} MB`
+}
+
+function formatDate(value?: string) {
+  if (!value) return ''
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+
+  return date.toLocaleDateString('zh-CN')
+}
 
 
 
@@ -126,7 +135,7 @@ export default function ResourceManagement() {
     },
   })
 
-  const [resources, setResources] = useState<LocalResourceMetadata[]>([]);
+  const [resources, setResources] = useState<ResourceCardResource[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false); // State to control dialog visibility
   const [uploadProgress, setUploadProgress] = useState(0); // State to track upload progress
@@ -134,38 +143,20 @@ export default function ResourceManagement() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null); // State to hold the selected image for preview
   const [uploadSpeed, setUploadSpeed] = useState<number>(0);
 
-  const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const [cancelUploadRequest, setCancelUploadRequest] = useState<(() => void) | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedFile, setSelectedFile] = useState<File | null>(null); // 新增文件状态
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedResources, setSelectedResources] = useState<Set<string>>(new Set());
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [resourceReferences, setResourceReferences] = useState<Record<string, Array<{ type: string; location: string; title?: string }>>>({});
+  const [resourceReferences, setResourceReferences] = useState<ResourceReferenceMap>({});
 
   const fetchResources = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('/api/resource');
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
-      }
-      const data = await response.json();
-      if (data.metadata && Array.isArray(data.metadata)) {
-        const transformedResources: LocalResourceMetadata[] = data.metadata.map((item: ResourceMetadataItem, index: number) => ({
-          id: item.hash,
-          title: `Resource ${index + 1}`,
-          items: [{
-            title: item.path,
-            description: '',
-            icon: '',
-            url: item.path.startsWith('/') ? item.path : `/${item.path}`
-          }]
-        }));
-        setResources(transformedResources);
-      } else {
-        throw new Error('Metadata is not available or is not an array');
-      }
+      setError(null);
+      setResources(await listResources());
     } catch (error) {
       if (error instanceof Error) {
         setError(error.message);
@@ -208,6 +199,14 @@ export default function ResourceManagement() {
       setSelectedImage(null);
       setSelectedFile(null);
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        toast({
+          title: "已取消",
+          description: "上传已取消",
+        });
+        return;
+      }
+
       if (error instanceof Error) {
         toast({
           title: "错误",
@@ -246,7 +245,7 @@ export default function ResourceManagement() {
     }
 
     setSelectedFile(file); // 保存文件对象
-    const base64Image = await toBase64(file);
+    const base64Image = await fileToDataUrl(file);
     setSelectedImage(base64Image);
   };
 
@@ -266,88 +265,24 @@ export default function ResourceManagement() {
   };
 
   const uploadImageWithProgress = (base64Image: string) => {
-    return new Promise((resolve, reject) => {
-      const controller = new AbortController();
-      setAbortController(controller);
+    setIsUploading(true);
+    const request = uploadResourceImageWithProgress(base64Image, {
+      onProgress: setUploadProgress,
+      onSpeed: setUploadSpeed,
+    });
+    setCancelUploadRequest(() => request.abort);
 
-      const xhr = new XMLHttpRequest();
-      xhr.open("POST", "/api/resource", true);
-      xhr.setRequestHeader("Content-Type", "application/json");
-
-      const startTime = Date.now();
-
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable) {
-          const percentComplete = (Number(event.loaded) / Number(event.total)) * 100;
-          setUploadProgress(Math.round(percentComplete));
-          setIsUploading(true);
-
-          // Calculate upload speed (bytes per second)
-          const currentTime = Date.now();
-          const elapsedTime = (currentTime - startTime) / 1000; // Convert to seconds
-          const speed = event.loaded / elapsedTime; // bytes per second
-          setUploadSpeed(speed);
-        }
-      };
-
-      xhr.onload = () => {
-        setIsUploading(false);
-        setUploadProgress(0);
-        setUploadSpeed(0);
-        setAbortController(null);
-
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            const response = JSON.parse(xhr.response);
-            resolve(response);
-          } catch (e) {
-            resolve(xhr.response);
-          }
-        } else {
-          reject(new Error(`上传失败: ${xhr.statusText}`));
-        }
-      };
-
-      xhr.onerror = () => {
-        setIsUploading(false);
-        setUploadProgress(0);
-        setUploadSpeed(0);
-        setAbortController(null);
-        reject(new Error("网络错误，上传失败"));
-      };
-
-      xhr.onabort = () => {
-        setIsUploading(false);
-        setUploadProgress(0);
-        setUploadSpeed(0);
-        setAbortController(null);
-        toast({
-          title: "已取消",
-          description: "上传已取消",
-        });
-      };
-
-      xhr.send(JSON.stringify({ image: base64Image }));
+    return request.promise.finally(() => {
+      setIsUploading(false);
+      setUploadProgress(0);
+      setUploadSpeed(0);
+      setCancelUploadRequest(null);
     });
   };
 
   // 添加取消上传函数
   const cancelUpload = () => {
-    if (abortController) {
-      abortController.abort();
-    }
-  };
-
-  // Helper function to convert file to Base64
-  const toBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => {
-        resolve(reader.result as string); // Return Base64 string
-      };
-      reader.onerror = (error) => reject(error);
-    });
+    cancelUploadRequest?.();
   };
 
   const copyToClipboard = (url: string) => {
@@ -356,7 +291,7 @@ export default function ResourceManagement() {
         title: "成功",
         description: "链接已复制到剪贴板",
       });
-    }).catch((error) => {
+    }).catch(() => {
       toast({
         title: "错误",
         description: "复制链接失败",
@@ -366,9 +301,13 @@ export default function ResourceManagement() {
   };
 
   // 添加搜索过滤函数
-  const filteredResources = resources.filter((resource) =>
-    resource.items[0].url.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredResources = resources.filter((resource) => {
+    const item = resource.items[0]
+    const query = searchQuery.toLowerCase()
+
+    return item.url.toLowerCase().includes(query) ||
+      (item.pathname || '').toLowerCase().includes(query)
+  });
 
   // 批量选择相关函数
   const toggleResourceSelection = (resourceId: string) => {
@@ -392,20 +331,7 @@ export default function ResourceManagement() {
   // 检查资源引用
   const checkResourceReferences = async (resourcePaths: string[]) => {
     try {
-      const response = await fetch('/api/resource/check-references', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ resourcePaths }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to check references');
-      }
-
-      const data = await response.json();
-      return data.references;
+      return await requestResourceReferences(resourcePaths);
     } catch (error) {
       console.error('Error checking references:', error);
       return {};
@@ -419,7 +345,6 @@ export default function ResourceManagement() {
     // 获取选中资源的路径和hash
     const selectedResourcesData = filteredResources.filter(r => selectedResources.has(r.id));
     const resourcePaths = selectedResourcesData.map(r => r.items[0].url);
-    const resourceHashes = selectedResourcesData.map(r => r.id);
 
     // 检查引用
     const references = await checkResourceReferences(resourcePaths);
@@ -436,19 +361,7 @@ export default function ResourceManagement() {
       setIsDeleting(true);
       const resourceHashes = Array.from(selectedResources);
 
-      const response = await fetch('/api/resource', {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ resourceHashes }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete resources');
-      }
-
-      const result = await response.json();
+      const result = await deleteResources(resourceHashes);
 
       toast({
         title: "成功",
@@ -574,6 +487,10 @@ export default function ResourceManagement() {
             </Button>
           </div>
 
+          <div className="text-xs text-muted-foreground">
+            当前显示：Vercel Blob 实际资源
+          </div>
+
           {/* 添加搜索框 */}
 
         </div>
@@ -637,9 +554,14 @@ export default function ResourceManagement() {
                 <div className="p-1.5 space-y-1">
                   {/* 文件名和上传时间 */}
                   <div className="space-y-0.5">
-                    <p className="text-[10px] text-gray-500 truncate" title={resource.items[0].url}>
-                      {resource.items[0].url.split('/').pop()}
+                    <p className="text-[10px] text-gray-500 truncate" title={resource.items[0].pathname || resource.items[0].url}>
+                      {(resource.items[0].pathname || resource.items[0].url).split('/').pop()}
                     </p>
+                    {(resource.items[0].size || resource.items[0].uploadedAt) && (
+                      <p className="text-[9px] text-gray-400 truncate">
+                        {[formatBytes(resource.items[0].size), formatDate(resource.items[0].uploadedAt)].filter(Boolean).join(' · ')}
+                      </p>
+                    )}
                   </div>
                   {/* 复制链接按钮 - 进一步缩小 */}
                   <Button
@@ -800,7 +722,7 @@ export default function ResourceManagement() {
 
           <div className="flex-1 overflow-hidden flex flex-col space-y-4">
             {/* 显示有引用的资源警告 */}
-            {Object.entries(resourceReferences).some(([_, refs]) => refs.length > 0) && (
+            {Object.entries(resourceReferences).some(([, refs]) => refs.length > 0) && (
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex-shrink-0">
                 <div className="flex items-start gap-2">
                   <Icons.alertCircle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />

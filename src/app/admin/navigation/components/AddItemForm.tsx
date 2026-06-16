@@ -20,6 +20,7 @@ import { Textarea } from "@/registry/new-york/ui/textarea"
 import { Switch } from "@/registry/new-york/ui/switch"
 import { useState, useEffect } from "react"
 import { useToast } from "@/registry/new-york/hooks/use-toast"
+import { fileToDataUrl, uploadResourceImage } from "@/services/resource-api"
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -253,29 +254,7 @@ export function AddItemForm({ onSubmit, onCancel, defaultValues }: AddItemFormPr
                           try {
                             setIsUploading(true);
 
-                            // 将文件转换为 base64
-                            const base64 = await new Promise<string>((resolve, reject) => {
-                              const reader = new FileReader();
-                              reader.onload = () => resolve(reader.result as string);
-                              reader.onerror = reject;
-                              reader.readAsDataURL(file);
-                            });
-
-                            const response = await fetch('/api/resource', {
-                              method: 'POST',
-                              headers: {
-                                'Content-Type': 'application/json',
-                              },
-                              body: JSON.stringify({
-                                image: base64 // 直接发送 base64 字符串
-                              }),
-                            });
-
-                            if (!response.ok) {
-                              throw new Error(`上传失败: ${response.status} ${response.statusText}`);
-                            }
-
-                            const data = await response.json();
+                            const data = await uploadResourceImage(await fileToDataUrl(file));
 
                             if (data.imageUrl) {
                               field.onChange(`${data.imageUrl}`); // 使用返回的图片URL
