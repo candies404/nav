@@ -224,7 +224,7 @@ export default function DataManagementPage() {
       if (result.started) {
         toast({
           title: "已启动",
-          description: `图标缓存任务已在后台启动，共 ${result.queued} 个待处理。稍后刷新数据可查看缓存后的图标地址。`,
+          description: `图标缓存任务已在后台启动，共 ${result.queued} 个待处理，每批 ${result.batchSize} 个，预计 ${result.batches} 批。稍后刷新数据可查看缓存后的图标地址。`,
         })
         return
       }
