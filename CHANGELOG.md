@@ -21,6 +21,7 @@
 - 资源相关 API 完成分层重构：服务端资源业务集中到 `resource-storage`，前端请求集中到 `resource-api`，上传、列表、删除和引用检测逻辑统一复用。
 - 站点管理和导航表单中的图片上传改为复用统一资源上传客户端，避免多处重复请求逻辑。
 - `.env.example` 明确 `BLOB_READ_WRITE_TOKEN` 是 Blob 写入、删除、列出资源的核心凭证，`BLOB_STORE_ID` 作为 Public Store 的可选标识。
+- 后台页面鉴权统一收敛到 `admin/layout`，减少登录后进入后台时的重复 session 校验。
 
 ### 修复
 
@@ -34,6 +35,7 @@
 - 删除资源管理对历史资源记录的回退展示，未配置 Blob 写入能力时直接提示配置缺失。
 - 清理 `public/assets` 下带时间戳的历史图片和 favicon 文件，避免继续维护旧的本地静态资源缓存。
 - 删除未使用且接口格式过期的 `ResourceService`。
+- 删除 `/admin` 路由的 middleware 鉴权，避免与后台 layout 鉴权重复执行。
 
 ### 相关提交
 
