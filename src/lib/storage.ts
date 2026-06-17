@@ -33,10 +33,20 @@ export type BlobAsset = {
   uploadedAt: string
 }
 
+export type DataHistoryVersion<T = unknown> = {
+  id: string
+  path: string
+  createdAt: string
+  message: string
+  data: T
+  metadata?: Record<string, unknown>
+}
+
 const DATA_PREFIX = process.env.UPSTASH_REDIS_KEY_PREFIX || 'navsphere'
 const DATA_CACHE_TTL_MS = Number(process.env.NAVSPHERE_DATA_CACHE_TTL_MS || 60_000)
 const DATA_ERROR_CACHE_TTL_MS = Number(process.env.NAVSPHERE_DATA_ERROR_CACHE_TTL_MS || 5_000)
 const BLOB_CACHE_MAX_AGE_SECONDS = Number(process.env.NAVSPHERE_BLOB_CACHE_MAX_AGE_SECONDS || 31_536_000)
+const DATA_HISTORY_LIMIT = positiveInteger(process.env.NAVSPHERE_DATA_HISTORY_LIMIT, 10)
 const globalCache = globalThis as typeof globalThis & {
   __navsphereDataCache?: Map<string, DataCacheEntry>
   __navsphereRedisConfigWarned?: boolean
@@ -100,6 +110,13 @@ function cloneDefault<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
 
+function positiveInteger(value: string | undefined, fallback: number) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback
+
+  return Math.floor(parsed)
+}
+
 function getCachedContent(path: string) {
   if (DATA_CACHE_TTL_MS <= 0) return undefined
 
@@ -149,6 +166,10 @@ function getDefaultContent(path: string) {
 // Preserve the original logical file paths while mapping them to Redis-safe keys.
 function dataKey(path: string) {
   return `${DATA_PREFIX}:data:${path.replace(/[\\/]+/g, ':')}`
+}
+
+function dataHistoryKey(path: string) {
+  return `${DATA_PREFIX}:history:${path.replace(/[\\/]+/g, ':')}`
 }
 
 function assetKey(id: string) {
@@ -254,6 +275,66 @@ export async function commitFile(
       await delay(500 * attempt)
     }
   }
+}
+
+export function getDataHistoryLimit() {
+  return DATA_HISTORY_LIMIT
+}
+
+export async function listDataHistoryVersions<T = unknown>(
+  path: string,
+  limit = DATA_HISTORY_LIMIT
+) {
+  const safeLimit = Math.max(Math.floor(limit), 1)
+  const rawVersions = await redisCommand<string[]>([
+    'LRANGE',
+    dataHistoryKey(path),
+    0,
+    safeLimit - 1,
+  ])
+
+  return (rawVersions || []).flatMap((rawVersion) => {
+    try {
+      return [JSON.parse(rawVersion) as DataHistoryVersion<T>]
+    } catch (error) {
+      console.warn('Failed to parse data history version:', error)
+      return []
+    }
+  })
+}
+
+export async function getDataHistoryVersion<T = unknown>(path: string, id: string) {
+  const versions = await listDataHistoryVersions<T>(path)
+  return versions.find(version => version.id === id) || null
+}
+
+export async function deleteDataHistoryVersion<T = unknown>(path: string, id: string) {
+  const key = dataHistoryKey(path)
+  const rawVersions = await redisCommand<string[]>(['LRANGE', key, 0, -1])
+  const rawVersion = (rawVersions || []).find((version) => {
+    try {
+      return (JSON.parse(version) as DataHistoryVersion<T>).id === id
+    } catch {
+      return false
+    }
+  })
+
+  if (!rawVersion) return false
+
+  const deletedCount = await redisCommand<number>(['LREM', key, 1, rawVersion])
+  return Boolean(deletedCount)
+}
+
+export async function pushDataHistoryVersion<T = unknown>(
+  path: string,
+  version: DataHistoryVersion<T>,
+  limit = DATA_HISTORY_LIMIT
+) {
+  const safeLimit = Math.max(Math.floor(limit), 1)
+  const key = dataHistoryKey(path)
+
+  await redisCommand<number>(['LPUSH', key, JSON.stringify(version)])
+  await redisCommand<string>(['LTRIM', key, 0, safeLimit - 1])
 }
 
 export async function saveAsset(

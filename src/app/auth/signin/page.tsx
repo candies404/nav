@@ -31,6 +31,8 @@ async function fetchCsrfToken() {
   return data.csrfToken
 }
 
+const ADMIN_CALLBACK_STORAGE_KEY = 'navsphereAdminCallbackUrl'
+
 function isAuthErrorUrl(value?: string | null) {
   if (!value) return true
 
@@ -43,20 +45,52 @@ function isAuthErrorUrl(value?: string | null) {
 }
 
 function getSafeCallbackUrl(value: string | null) {
-  if (!value || !value.startsWith('/') || value.startsWith('//')) {
-    return '/admin'
+  if (!value || !value.startsWith('/admin') || value.startsWith('//')) {
+    return null
   }
 
   return value
 }
 
+function getStoredCallbackUrl() {
+  try {
+    return getSafeCallbackUrl(window.sessionStorage.getItem(ADMIN_CALLBACK_STORAGE_KEY))
+  } catch {
+    return null
+  }
+}
+
+function persistCallbackUrl(value: string) {
+  try {
+    window.sessionStorage.setItem(ADMIN_CALLBACK_STORAGE_KEY, value)
+  } catch {
+    // Storage can be unavailable in private browsing modes.
+  }
+}
+
+function clearStoredCallbackUrl() {
+  try {
+    window.sessionStorage.removeItem(ADMIN_CALLBACK_STORAGE_KEY)
+  } catch {
+    // Ignore storage cleanup failures; navigation can still proceed.
+  }
+}
+
 function SignInContent() {
   const searchParams = useSearchParams()
-  const callbackUrl = getSafeCallbackUrl(searchParams?.get('callbackUrl') || null)
+  const queryCallbackUrl = getSafeCallbackUrl(searchParams?.get('callbackUrl') || null)
+  const [callbackUrl, setCallbackUrl] = useState(queryCallbackUrl || '/admin')
   const [password, setPassword] = useState('')
   const [csrfToken, setCsrfToken] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    const nextCallbackUrl = queryCallbackUrl || getStoredCallbackUrl() || '/admin'
+
+    setCallbackUrl(nextCallbackUrl)
+    persistCallbackUrl(nextCallbackUrl)
+  }, [queryCallbackUrl])
 
   useEffect(() => {
     let isActive = true
@@ -106,6 +140,7 @@ function SignInContent() {
         return
       }
 
+      clearStoredCallbackUrl()
       window.location.replace(callbackUrl)
     } catch (error) {
       console.error('登录失败:', error)

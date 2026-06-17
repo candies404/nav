@@ -2,9 +2,9 @@
 export const runtime = 'edge'
 
 import { useState, useEffect } from 'react'
-import { NavigationItem, NavigationSubItem, NavigationCategory } from '@/types/navigation'
+import { NavigationItem, NavigationCategory } from '@/types/navigation'
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { JsonEditor } from "@/components/ui/json-editor"
 import { useToast } from "@/components/ui/use-toast"
 import {
@@ -12,13 +12,14 @@ import {
   RefreshCw,
   Save,
   AlertTriangle,
-  Database,
-  FileText,
   CheckCircle,
   XCircle,
-  Info,
   Upload,
-  CloudUpload
+  CloudUpload,
+  Eye,
+  History,
+  RotateCcw,
+  Trash2
 } from "lucide-react"
 import {
   Dialog,
@@ -30,6 +31,21 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
+
+type NavigationHistorySummary = {
+  id: string
+  createdAt: string
+  message: string
+  categoryCount: number
+  siteCount: number
+  size: number
+}
+
+type NavigationHistoryDetail = NavigationHistorySummary & {
+  data: {
+    navigationItems: NavigationItem[]
+  }
+}
 
 export default function DataManagementPage() {
   const [navigationData, setNavigationData] = useState('')
@@ -43,6 +59,12 @@ export default function DataManagementPage() {
 
   const [editorErrors, setEditorErrors] = useState<string[]>([])
   const [defaultFileStatus, setDefaultFileStatus] = useState({ exists: false, valid: false, itemCount: 0, checked: false })
+  const [historyVersions, setHistoryVersions] = useState<NavigationHistorySummary[]>([])
+  const [historyLimit, setHistoryLimit] = useState(10)
+  const [historyPreview, setHistoryPreview] = useState<NavigationHistoryDetail | null>(null)
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+  const [isRestoringHistory, setIsRestoringHistory] = useState(false)
+  const [deletingHistoryId, setDeletingHistoryId] = useState<string | null>(null)
   const { toast } = useToast()
 
   // 检查默认文件状态
@@ -58,6 +80,40 @@ export default function DataManagementPage() {
     } catch (error) {
       console.error('Failed to check default file:', error)
       setDefaultFileStatus({ exists: false, valid: false, itemCount: 0, checked: true })
+    }
+  }
+
+  const loadHistoryVersions = async () => {
+    setIsLoadingHistory(true)
+    try {
+      const response = await fetch('/api/navigation/history')
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.details || result.error || '加载历史版本失败')
+      }
+
+      setHistoryVersions(Array.isArray(result.versions) ? result.versions : [])
+      setHistoryLimit(typeof result.limit === 'number' ? result.limit : 10)
+    } catch (error) {
+      console.error('Load history error:', error)
+      toast({
+        title: "错误",
+        description: (error as Error).message || "加载历史版本失败",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoadingHistory(false)
+    }
+  }
+
+  const openRestoreDialog = (open: boolean) => {
+    setIsRestoreDialogOpen(open)
+
+    if (open) {
+      setHistoryPreview(null)
+      loadHistoryVersions()
+      checkDefaultFile()
     }
   }
 
@@ -116,6 +172,104 @@ export default function DataManagementPage() {
     }
   }
 
+  const previewHistoryVersion = async (versionId: string) => {
+    setIsLoadingHistory(true)
+    try {
+      const response = await fetch(`/api/navigation/history/${encodeURIComponent(versionId)}`)
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.details || result.error || '加载历史版本详情失败')
+      }
+
+      setHistoryPreview(result.version)
+    } catch (error) {
+      console.error('Preview history error:', error)
+      toast({
+        title: "错误",
+        description: (error as Error).message || "加载历史版本详情失败",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoadingHistory(false)
+    }
+  }
+
+  const restoreHistoryVersion = async (versionId: string) => {
+    setIsRestoringHistory(true)
+    try {
+      const response = await fetch('/api/navigation/history/restore', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ id: versionId }),
+      })
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.details || result.error || '恢复历史版本失败')
+      }
+
+      const jsonString = JSON.stringify(result.data, null, 2)
+      setNavigationData(jsonString)
+      validateJson(jsonString)
+      setHistoryPreview(null)
+      setIsRestoreDialogOpen(false)
+      await loadHistoryVersions()
+
+      toast({
+        title: "成功",
+        description: "已恢复到选中的历史版本，恢复前的数据已自动保存为新历史版本",
+      })
+    } catch (error) {
+      console.error('Restore history error:', error)
+      toast({
+        title: "错误",
+        description: (error as Error).message || "恢复历史版本失败",
+        variant: "destructive",
+      })
+    } finally {
+      setIsRestoringHistory(false)
+    }
+  }
+
+  const deleteHistoryVersion = async (versionId: string) => {
+    if (!window.confirm('确认删除这个历史版本？删除后无法从历史版本中恢复。')) return
+
+    setDeletingHistoryId(versionId)
+    try {
+      const response = await fetch(`/api/navigation/history/${encodeURIComponent(versionId)}`, {
+        method: 'DELETE',
+      })
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.details || result.error || '删除历史版本失败')
+      }
+
+      if (historyPreview?.id === versionId) {
+        setHistoryPreview(null)
+      }
+
+      await loadHistoryVersions()
+
+      toast({
+        title: "成功",
+        description: "历史版本已删除",
+      })
+    } catch (error) {
+      console.error('Delete history error:', error)
+      toast({
+        title: "错误",
+        description: (error as Error).message || "删除历史版本失败",
+        variant: "destructive",
+      })
+    } finally {
+      setDeletingHistoryId(null)
+    }
+  }
+
   // 恢复初始化数据
   const restoreDefaultData = async () => {
     // 检查默认文件是否存在
@@ -149,9 +303,10 @@ export default function DataManagementPage() {
         setNavigationData(jsonString)
         validateJson(jsonString)
         setIsRestoreDialogOpen(false)
+        await loadHistoryVersions()
         toast({
           title: "成功",
-          description: `已恢复为初始化数据（${defaultFileStatus.itemCount} 个分类）`,
+          description: `没有历史版本，已恢复为初始化数据（${defaultFileStatus.itemCount} 个分类）`,
         })
       } else {
         const errorData = await response.json()
@@ -188,14 +343,24 @@ export default function DataManagementPage() {
         },
         body: navigationData,
       })
+      const result = await response.json()
 
       if (response.ok) {
+        if (result.saved === false) {
+          toast({
+            title: "无需保存",
+            description: "数据未修改，已跳过保存",
+          })
+          return
+        }
+
+        await loadHistoryVersions()
         toast({
           title: "成功",
           description: "数据保存成功",
         })
       } else {
-        throw new Error('保存失败')
+        throw new Error(result.details || result.error || '保存失败')
       }
     } catch (error) {
       console.error('Save data error:', error)
@@ -384,11 +549,25 @@ export default function DataManagementPage() {
     }
   }
 
+  const formatHistoryTime = (value: string) => {
+    try {
+      return new Intl.DateTimeFormat('zh-CN', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(new Date(value))
+    } catch {
+      return value
+    }
+  }
 
+  const formatSize = (size: number) => `${(size / 1024).toFixed(2)} KB`
 
   useEffect(() => {
     loadNavigationData()
     checkDefaultFile()
+    loadHistoryVersions()
   }, [])
 
   // Monaco Editor 事件监听
@@ -431,7 +610,7 @@ export default function DataManagementPage() {
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">数据管理</h1>
           </div>
           <p className="text-muted-foreground">
-            管理导航数据，支持恢复初始化、在线编辑和数据下载
+            管理导航数据，支持历史版本恢复、在线编辑和数据下载
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -454,36 +633,139 @@ export default function DataManagementPage() {
               刷新数据
             </Button>
 
-            <Dialog open={isRestoreDialogOpen} onOpenChange={setIsRestoreDialogOpen}>
+            <Dialog open={isRestoreDialogOpen} onOpenChange={openRestoreDialog}>
               <DialogTrigger asChild>
                 <Button
                   variant="outline"
-                  disabled={isLoading || !defaultFileStatus.exists || !defaultFileStatus.valid}
+                  disabled={isLoading}
                   className="relative h-12 w-full"
                 >
-                  <AlertTriangle className="mr-2 h-4 w-4 text-orange-500" />
-                  恢复初始化
-                  {defaultFileStatus.checked && !defaultFileStatus.exists && (
+                  <History className="mr-2 h-4 w-4" />
+                  历史版本
+                  {historyVersions.length > 0 && (
+                    <Badge variant="outline" className="pointer-events-none absolute right-0 top-0 flex h-5 min-w-5 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border bg-background px-1.5 py-0 text-[11px] leading-none text-foreground shadow-sm">
+                      {historyVersions.length}
+                    </Badge>
+                  )}
+                  {historyVersions.length === 0 && defaultFileStatus.checked && !defaultFileStatus.exists && (
                     <Badge variant="destructive" className="absolute -top-1 -right-1 h-4 w-4 p-0 text-xs">
                       !
                     </Badge>
                   )}
                 </Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="max-w-4xl">
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2">
-                    <AlertTriangle className="h-5 w-5 text-orange-500" />
-                    确认恢复初始化数据？
+                    <History className="h-5 w-5" />
+                    历史版本
                   </DialogTitle>
-                  <DialogDescription className="space-y-3">
-                    <div>
-                      此操作将使用 <code className="bg-muted px-1 py-0.5 rounded">navigation-default.json</code> 的数据覆盖当前的 <code className="bg-muted px-1 py-0.5 rounded">navigation.json</code> 文件。
+                  <DialogDescription>
+                    保留最近 {historyLimit} 个导航数据版本。没有历史版本时，可恢复为初始化数据。
+                  </DialogDescription>
+                </DialogHeader>
+                {isLoadingHistory ? (
+                  <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    加载历史版本中...
+                  </div>
+                ) : historyVersions.length > 0 ? (
+                  <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                    <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
+                      {historyVersions.map((version) => (
+                        <div key={version.id} className="rounded-lg border p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 space-y-1">
+                              <div className="font-medium">{formatHistoryTime(version.createdAt)}</div>
+                              <div className="truncate text-xs text-muted-foreground" title={version.message}>
+                                {version.message}
+                              </div>
+                              <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                <Badge variant="outline">{version.categoryCount} 分类</Badge>
+                                <Badge variant="outline">{version.siteCount} 站点</Badge>
+                                <Badge variant="outline">{formatSize(version.size)}</Badge>
+                              </div>
+                            </div>
+                            <div className="flex shrink-0 gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => previewHistoryVersion(version.id)}
+                                disabled={isLoadingHistory || isRestoringHistory || deletingHistoryId === version.id}
+                              >
+                                <Eye className="mr-1 h-3.5 w-3.5" />
+                                预览
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() => restoreHistoryVersion(version.id)}
+                                disabled={isLoadingHistory || isRestoringHistory || deletingHistoryId === version.id}
+                              >
+                                {isRestoringHistory ? (
+                                  <RefreshCw className="mr-1 h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <RotateCcw className="mr-1 h-3.5 w-3.5" />
+                                )}
+                                恢复
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => deleteHistoryVersion(version.id)}
+                                disabled={isLoadingHistory || isRestoringHistory || deletingHistoryId === version.id}
+                              >
+                                {deletingHistoryId === version.id ? (
+                                  <RefreshCw className="mr-1 h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Trash2 className="mr-1 h-3.5 w-3.5" />
+                                )}
+                                删除
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="min-h-[240px] rounded-lg border bg-muted/30 p-3">
+                      {historyPreview ? (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-medium">{formatHistoryTime(historyPreview.createdAt)}</div>
+                              <div className="truncate text-xs text-muted-foreground" title={historyPreview.message}>
+                                {historyPreview.message}
+                              </div>
+                            </div>
+                            <Badge variant="outline">{historyPreview.siteCount} 站点</Badge>
+                          </div>
+                          <textarea
+                            readOnly
+                            value={JSON.stringify(historyPreview.data, null, 2)}
+                            className="h-[340px] w-full resize-none overflow-auto rounded border bg-background p-3 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            aria-label="历史版本 JSON 预览"
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex h-full min-h-[220px] items-center justify-center text-sm text-muted-foreground">
+                          选择一个历史版本进行预览
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-900">
+                      <div className="mb-1 flex items-center gap-2 font-medium">
+                        <AlertTriangle className="h-4 w-4" />
+                        暂无历史版本
+                      </div>
+                      <div>
+                        当前 Upstash Redis/KV 中没有可恢复的历史版本，可使用 <code className="rounded bg-white/70 px-1 py-0.5">navigation-default.json</code> 恢复初始化数据。
+                      </div>
                     </div>
 
-                    {/* 默认文件状态 */}
-                    <div className="p-3 bg-muted/50 rounded-lg">
-                      <div className="text-sm font-medium mb-2">默认文件状态：</div>
+                    <div className="rounded-lg bg-muted/50 p-3">
+                      <div className="mb-2 text-sm font-medium">默认文件状态：</div>
                       <div className="space-y-1 text-sm">
                         <div className="flex items-center justify-between">
                           <span>文件存在：</span>
@@ -505,24 +787,22 @@ export default function DataManagementPage() {
                         )}
                       </div>
                     </div>
-
-                    <div className="text-destructive font-medium">
-                      ⚠️ 这个操作不可撤销，请确认是否继续。
-                    </div>
-                  </DialogDescription>
-                </DialogHeader>
+                  </div>
+                )}
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setIsRestoreDialogOpen(false)}>
                     取消
                   </Button>
-                  <Button
-                    onClick={restoreDefaultData}
-                    disabled={isLoading || !defaultFileStatus.exists || !defaultFileStatus.valid}
-                    variant="destructive"
-                  >
-                    {isLoading && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
-                    确认恢复
-                  </Button>
+                  {historyVersions.length === 0 && (
+                    <Button
+                      onClick={restoreDefaultData}
+                      disabled={isLoading || isLoadingHistory || !defaultFileStatus.exists || !defaultFileStatus.valid}
+                      variant="destructive"
+                    >
+                      {isLoading && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
+                      恢复初始化
+                    </Button>
+                  )}
                 </DialogFooter>
               </DialogContent>
             </Dialog>
@@ -735,17 +1015,19 @@ export default function DataManagementPage() {
                   <CardContent className="pt-0">
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">最后保存:</span>
-                        <span className="font-mono text-xs">未保存</span>
+                        <span className="text-muted-foreground">最近版本:</span>
+                        <span className="font-mono text-xs">
+                          {historyVersions[0] ? formatHistoryTime(historyVersions[0].createdAt) : '暂无'}
+                        </span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">数据版本:</span>
-                        <span className="font-mono text-xs">当前</span>
+                        <span className="text-muted-foreground">保留上限:</span>
+                        <span className="font-mono text-xs">{historyLimit}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">备份状态:</span>
                         <Badge variant="outline" className="text-xs">
-                          可恢复
+                          {historyVersions.length > 0 ? `${historyVersions.length} 个版本` : '可恢复默认'}
                         </Badge>
                       </div>
                     </div>

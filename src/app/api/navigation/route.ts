@@ -67,7 +67,7 @@ async function validateAndSaveNavigationData(data: NavigationData) {
     throw new Error('Invalid navigation data: some items are malformed')
   }
 
-  await saveNavigationData(data, 'Update navigation data')
+  return saveNavigationData(data, 'Update navigation data')
 }
 
 export async function POST(request: Request) {
@@ -78,9 +78,9 @@ export async function POST(request: Request) {
     }
 
     const data = await request.json()
-    await validateAndSaveNavigationData(data)
+    const result = await validateAndSaveNavigationData(data)
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, ...result })
   } catch (error) {
     console.error('Failed to save navigation data:', error)
     return NextResponse.json(
@@ -101,9 +101,9 @@ export async function PUT(request: Request) {
     }
 
     const data = await request.json()
-    await validateAndSaveNavigationData(data)
+    const result = await validateAndSaveNavigationData(data)
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, ...result })
   } catch (error) {
     console.error('Failed to update navigation data:', error)
     return NextResponse.json(

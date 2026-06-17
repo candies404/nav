@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
 import { auth } from '@/lib/auth'
 import { AdminLayoutClient } from './AdminLayoutClient'
 import { Toaster } from "@/registry/new-york/ui/toaster"
@@ -22,10 +23,14 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode
 }) {
-  const session = await auth()
+  const [session, requestHeaders] = await Promise.all([
+    auth(),
+    headers(),
+  ])
 
   if (!session?.user) {
-    redirect('/auth/signin')
+    const callbackUrl = getSafeAdminCallbackUrl(requestHeaders.get('x-navsphere-pathname'))
+    redirect(`/auth/signin?callbackUrl=${encodeURIComponent(callbackUrl)}`)
   }
 
   return (
@@ -42,4 +47,12 @@ export default async function AdminLayout({
       <Toaster />
     </>
   )
-} 
+}
+
+function getSafeAdminCallbackUrl(value: string | null) {
+  if (!value || !value.startsWith('/admin') || value.startsWith('//')) {
+    return '/admin'
+  }
+
+  return value
+}
