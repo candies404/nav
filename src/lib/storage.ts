@@ -339,6 +339,22 @@ export async function deleteBlobAssets(paths: string[]) {
   return blobPaths.length
 }
 
+export async function deleteStoredAssets(ids: string[]) {
+  const assetIds = [...new Set(ids.filter(Boolean))]
+  if (assetIds.length === 0) return 0
+
+  try {
+    const deletedCount = await redisCommand<number>(['DEL', ...assetIds.map(assetKey)])
+    return deletedCount || 0
+  } catch (error) {
+    if (!isMissingRedisConfigError(error)) {
+      console.warn('Failed to delete stored assets:', error)
+    }
+
+    return 0
+  }
+}
+
 export async function getAsset(id: string): Promise<StoredAsset | null> {
   const raw = await redisCommand<string>(['GET', assetKey(id)])
   if (!raw) return null
@@ -365,5 +381,27 @@ export async function setCachedFavicon(domain: string, iconUrl: string) {
     if (!isMissingRedisConfigError(error)) {
       console.warn('Failed to write favicon cache:', error)
     }
+  }
+}
+
+export async function deleteCachedFavicon(domain: string, expectedIconUrl?: string) {
+  try {
+    const normalizedDomain = domain.toLowerCase()
+
+    if (expectedIconUrl) {
+      const cachedIconUrl = await redisCommand<string>(['GET', faviconCacheKey(normalizedDomain)])
+      if (cachedIconUrl !== expectedIconUrl) {
+        return false
+      }
+    }
+
+    await redisCommand<number>(['DEL', faviconCacheKey(normalizedDomain)])
+    return true
+  } catch (error) {
+    if (!isMissingRedisConfigError(error)) {
+      console.warn('Failed to delete favicon cache:', error)
+    }
+
+    return false
   }
 }

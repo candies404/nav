@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { isAuthenticatedRequest } from '@/lib/auth-token'
-import { commitFile, getFileContent, getStorageErrorMessage } from '@/lib/storage'
+import { getFileContent, getStorageErrorMessage } from '@/lib/storage'
 import { filterNavigationData, processNavigationData } from '@/lib/data-loader'
+import { saveNavigationData } from '@/lib/navigation-storage'
 import type { NavigationData, NavigationDataRaw, NavigationItem } from '@/types/navigation'
 
 export const runtime = 'edge'
@@ -66,11 +67,7 @@ async function validateAndSaveNavigationData(data: NavigationData) {
     throw new Error('Invalid navigation data: some items are malformed')
   }
 
-  await commitFile(
-    'src/navsphere/content/navigation.json',
-    JSON.stringify(data, null, 2),
-    'Update navigation data'
-  )
+  await saveNavigationData(data, 'Update navigation data')
 }
 
 export async function POST(request: Request) {

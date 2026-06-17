@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { commitFile, getFileContent, getStorageErrorMessage } from '@/lib/storage'
+import { getFileContent, getStorageErrorMessage } from '@/lib/storage'
+import { saveNavigationData } from '@/lib/navigation-storage'
 import type { NavigationData, NavigationItem } from '@/types/navigation'
 
 export const runtime = 'edge'
@@ -57,11 +58,7 @@ export async function PUT(
       item.id === id ? mergedItem : item
     )
 
-    await commitFile(
-      'src/navsphere/content/navigation.json',
-      JSON.stringify({ navigationItems: updatedItems }, null, 2),
-      'Update navigation item'
-    )
+    await saveNavigationData({ navigationItems: updatedItems }, 'Update navigation item')
 
     return NextResponse.json(mergedItem)
   } catch (error) {
@@ -84,11 +81,7 @@ export async function DELETE(
     const data = await getFileContent('src/navsphere/content/navigation.json') as NavigationData
     const updatedItems = data.navigationItems.filter(item => item.id !== id)
 
-    await commitFile(
-      'src/navsphere/content/navigation.json',
-      JSON.stringify({ navigationItems: updatedItems }, null, 2),
-      'Delete navigation item'
-    )
+    await saveNavigationData({ navigationItems: updatedItems }, 'Delete navigation item')
 
     return NextResponse.json({ success: true })
   } catch (error) {

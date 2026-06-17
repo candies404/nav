@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { commitFile, getFileContent, getStorageErrorMessage } from '@/lib/storage'
+import { getFileContent, getStorageErrorMessage } from '@/lib/storage'
+import { saveNavigationData } from '@/lib/navigation-storage'
+import type { NavigationData } from '@/types/navigation'
 
 export const runtime = 'edge'
 
@@ -27,11 +29,7 @@ export async function POST() {
       }
 
       // 将默认数据写入到navigation.json
-      await commitFile(
-        'src/navsphere/content/navigation.json',
-        JSON.stringify(defaultData, null, 2),
-        'Restore navigation data to default'
-      )
+      await saveNavigationData(defaultData as NavigationData, 'Restore navigation data to default')
 
       return NextResponse.json(defaultData)
     } catch (fileError) {

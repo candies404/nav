@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { commitFile, getFileContent, getStorageErrorMessage } from '@/lib/storage'
-import type { NavigationData, NavigationItem } from '@/types/navigation'
+import { getFileContent, getStorageErrorMessage } from '@/lib/storage'
+import { saveNavigationData } from '@/lib/navigation-storage'
+import type { NavigationData } from '@/types/navigation'
 
 export const runtime = 'edge'
 
@@ -47,11 +48,7 @@ export async function DELETE(
       return nav
     })
 
-    await commitFile(
-      'src/navsphere/content/navigation.json',
-      JSON.stringify({ navigationItems: updatedNavigations }, null, 2),
-      `Delete category: ${categoryId}`
-    )
+    await saveNavigationData({ navigationItems: updatedNavigations }, `Delete category: ${categoryId}`)
 
     return NextResponse.json({ success: true })
   } catch (error) {

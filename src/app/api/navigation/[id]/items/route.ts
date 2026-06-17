@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { commitFile, getFileContent, getStorageErrorMessage } from '@/lib/storage'
-import type { NavigationData, NavigationItem, NavigationSubItem } from '@/types/navigation'
+import { getFileContent, getStorageErrorMessage } from '@/lib/storage'
+import { saveNavigationData } from '@/lib/navigation-storage'
+import type { NavigationData, NavigationSubItem } from '@/types/navigation'
 
 export const runtime = 'edge'
 
@@ -48,11 +49,7 @@ export async function POST(
       return item
     })
 
-    await commitFile(
-      'src/navsphere/content/navigation.json',
-      JSON.stringify({ navigationItems: updatedItems }, null, 2),
-      'Add navigation item'
-    )
+    await saveNavigationData({ navigationItems: updatedItems }, 'Add navigation item')
 
     return NextResponse.json({ success: true })
   } catch (error) {
@@ -92,11 +89,7 @@ export async function PUT(
       return nav
     })
 
-    await commitFile(
-      'src/navsphere/content/navigation.json',
-      JSON.stringify({ navigationItems: updatedNavigations }, null, 2),
-      'Update navigation item'
-    )
+    await saveNavigationData({ navigationItems: updatedNavigations }, 'Update navigation item')
 
     return NextResponse.json({ success: true })
   } catch (error) {
@@ -134,11 +127,7 @@ export async function DELETE(
       return nav
     })
 
-    await commitFile(
-      'src/navsphere/content/navigation.json',
-      JSON.stringify({ navigationItems: updatedNavigations }, null, 2),
-      'Delete navigation item'
-    )
+    await saveNavigationData({ navigationItems: updatedNavigations }, 'Delete navigation item')
 
     return NextResponse.json({ success: true })
   } catch (error) {

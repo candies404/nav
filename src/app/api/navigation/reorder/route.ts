@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { commitFile, getFileContent, getStorageErrorMessage } from '@/lib/storage'
-import type { NavigationData, NavigationItem } from '@/types/navigation'
+import { getFileContent, getStorageErrorMessage } from '@/lib/storage'
+import { saveNavigationData } from '@/lib/navigation-storage'
+import type { NavigationData } from '@/types/navigation'
 
 export const runtime = 'edge'
 
@@ -35,11 +36,7 @@ export async function POST(request: Request) {
     data.navigationItems = updatedItems
 
     // 保存更改到 Redis
-    await commitFile(
-      'src/navsphere/content/navigation.json',
-      JSON.stringify(data, null, 2),
-      `重新排序导航项 - ${new Date().toISOString()}`
-    )
+    await saveNavigationData(data, `重新排序导航项 - ${new Date().toISOString()}`)
 
     return NextResponse.json(data.navigationItems, { status: 200 })
   } catch (error) {
