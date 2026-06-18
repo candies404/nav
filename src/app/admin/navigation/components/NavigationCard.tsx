@@ -18,10 +18,8 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/regi
 import { NavigationItem } from '@/types/navigation'
 import { navigationIcons, type IconType } from '@/lib/icons'
 import { 
-  Folder, 
   FolderOpen, 
   List, 
-  Image, 
   Pencil, 
   Trash, 
   ChevronsUp, 
@@ -83,7 +81,7 @@ export function NavigationCard({
         title: "成功",
         description: "保存成功"
       })
-    } catch (error) {
+    } catch {
       toast({
         title: "错误",
         description: "保存失败",
@@ -106,7 +104,7 @@ export function NavigationCard({
         title: "成功",
         description: "删除成功"
       })
-    } catch (error) {
+    } catch {
       toast({
         title: "错误",
         description: "删除失败",

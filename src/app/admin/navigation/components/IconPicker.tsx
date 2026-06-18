@@ -9,7 +9,6 @@ import {
   CommandGroup,
   CommandInput,
   CommandItem,
-  CommandList,
   CommandSeparator,
 } from "@/registry/new-york/ui/command"
 import {
@@ -17,7 +16,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/registry/new-york/ui/popover"
-import { cn } from "@/lib/utils"
 import { Check } from "lucide-react"
 
 // 按分类组织图标

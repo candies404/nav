@@ -2,7 +2,7 @@
 
 export const runtime = 'edge'
 
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Button } from "@/registry/new-york/ui/button"
 import { useToast } from "@/registry/new-york/hooks/use-toast"
@@ -46,6 +46,7 @@ export default function CategoriesPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
   const { toast } = useToast()
+  const navigationId = params?.id
   const [navigation, setNavigation] = useState<NavigationItem | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [editingCategory, setEditingCategory] = useState<{ index: number; category: NavigationCategory } | null>(null)
@@ -54,26 +55,18 @@ export default function CategoriesPage() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [statusFilter, setStatusFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
 
-  useEffect(() => {
-    if (!params?.id) {
-      router.push('/admin/navigation')
-      return
-    }
-    fetchNavigation()
-  }, [params?.id])
-
-  const fetchNavigation = async () => {
-    if (!params?.id) {
+  const fetchNavigation = useCallback(async () => {
+    if (!navigationId) {
       throw new Error('Navigation ID not found')
     }
 
     try {
       setIsLoading(true)
-      const response = await fetch(`/api/navigation/${params.id}`)
+      const response = await fetch(`/api/navigation/${navigationId}`)
       if (!response.ok) throw new Error('Failed to fetch')
       const data = await response.json()
       setNavigation(data)
-    } catch (error) {
+    } catch {
       toast({
         title: "错误",
         description: "加载数据失败",
@@ -82,7 +75,15 @@ export default function CategoriesPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [navigationId, toast])
+
+  useEffect(() => {
+    if (!navigationId) {
+      router.push('/admin/navigation')
+      return
+    }
+    fetchNavigation()
+  }, [fetchNavigation, navigationId, router])
 
   const addCategory = async (values: {
     title: string,
@@ -90,7 +91,7 @@ export default function CategoriesPage() {
     description?: string,
     enabled: boolean
   }) => {
-    if (!params?.id || !navigation) return
+    if (!navigationId || !navigation) return
 
     try {
       const newCategory: NavigationCategory = {
@@ -107,7 +108,7 @@ export default function CategoriesPage() {
         subCategories: [...(navigation.subCategories || []), newCategory]
       }
 
-      const response = await fetch(`/api/navigation/${params.id}`, {
+      const response = await fetch(`/api/navigation/${navigationId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedNavigation)
@@ -137,7 +138,7 @@ export default function CategoriesPage() {
     description?: string,
     enabled: boolean
   }) => {
-    if (!params?.id || !navigation || !editingCategory) return
+    if (!navigationId || !navigation || !editingCategory) return
 
     try {
       const updatedCategories = navigation.subCategories?.map((cat, index) =>
@@ -157,7 +158,7 @@ export default function CategoriesPage() {
         subCategories: updatedCategories
       }
 
-      const response = await fetch(`/api/navigation/${params.id}`, {
+      const response = await fetch(`/api/navigation/${navigationId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedNavigation)
@@ -173,7 +174,7 @@ export default function CategoriesPage() {
         title: "成功",
         description: "更新成功"
       })
-    } catch (error) {
+    } catch {
       toast({
         title: "错误",
         description: "保存失败",
@@ -183,12 +184,12 @@ export default function CategoriesPage() {
   }
 
   const deleteCategory = async (categoryId: string) => {
-    if (!params?.id) {
+    if (!navigationId) {
       throw new Error('Navigation ID not found')
     }
 
     try {
-      const response = await fetch(`/api/navigation/${params.id}/categories`, {
+      const response = await fetch(`/api/navigation/${navigationId}/categories`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ categoryId })
@@ -201,7 +202,7 @@ export default function CategoriesPage() {
         title: "成功",
         description: "删除成功"
       })
-    } catch (error) {
+    } catch {
       toast({
         title: "错误",
         description: "删除失败",
@@ -211,7 +212,7 @@ export default function CategoriesPage() {
   }
 
   const moveCategory = async (fromIndex: number, toIndex: number) => {
-    if (!params?.id) {
+    if (!navigationId) {
       throw new Error('Navigation ID not found')
     }
 
@@ -227,7 +228,7 @@ export default function CategoriesPage() {
     }
 
     try {
-      const response = await fetch(`/api/navigation/${params.id}`, {
+      const response = await fetch(`/api/navigation/${navigationId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedNavigation)
@@ -237,7 +238,7 @@ export default function CategoriesPage() {
 
       const updatedData = await response.json()
       setNavigation(updatedData)
-    } catch (error) {
+    } catch {
       toast({
         title: "错误",
         description: "保存顺序失败",
@@ -255,7 +256,7 @@ export default function CategoriesPage() {
   }
 
   const moveToTop = async (id: string) => {
-    if (!params?.id) {
+    if (!navigationId) {
       throw new Error('Navigation ID not found')
     }
 
@@ -267,7 +268,7 @@ export default function CategoriesPage() {
   }
 
   const moveToBottom = async (id: string) => {
-    if (!params?.id) {
+    if (!navigationId) {
       throw new Error('Navigation ID not found')
     }
 
@@ -455,8 +456,8 @@ export default function CategoriesPage() {
                               variant="ghost"
                               size="icon"
                               onClick={() => {
-                                if (params?.id) {
-                                  router.push(`/admin/navigation/${params.id}/categories/${category.id}/items`)
+                                if (navigationId) {
+                                  router.push(`/admin/navigation/${navigationId}/categories/${category.id}/items`)
                                 }
                               }}
                               title="管理子项目"

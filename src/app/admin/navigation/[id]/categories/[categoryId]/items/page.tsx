@@ -2,7 +2,7 @@
 
 export const runtime = 'edge'
 
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Button } from "@/registry/new-york/ui/button"
 import { useToast } from "@/registry/new-york/hooks/use-toast"
@@ -40,9 +40,11 @@ interface NavigationSubItem {
 }
 
 export default function CategoryItemsPage() {
-  const params = useParams()
+  const params = useParams<{ id: string; categoryId: string }>()
   const router = useRouter()
   const { toast } = useToast()
+  const navigationId = params?.id
+  const categoryId = params?.categoryId
   const [navigation, setNavigation] = useState<NavigationItem | null>(null)
   const [category, setCategory] = useState<NavigationCategory | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
@@ -52,30 +54,22 @@ export default function CategoryItemsPage() {
   const [filter, setFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
 
-  useEffect(() => {
-    if (!params?.id || !params?.categoryId) {
-      router.push('/admin/navigation')
-      return
-    }
-    fetchData()
-  }, [params?.id, params?.categoryId])
-
-  const fetchData = async () => {
-    if (!params?.id || !params?.categoryId) return
+  const fetchData = useCallback(async () => {
+    if (!navigationId || !categoryId) return
 
     try {
       setLoading(true)
-      const response = await fetch(`/api/navigation/${params.id}`)
+      const response = await fetch(`/api/navigation/${navigationId}`)
       if (!response.ok) throw new Error('Failed to fetch')
       const data = await response.json()
       setNavigation(data)
       
       const foundCategory = data.subCategories?.find(
-        (cat: NavigationCategory) => cat.id === params.categoryId
+        (cat: NavigationCategory) => cat.id === categoryId
       )
       if (!foundCategory) throw new Error('Category not found')
       setCategory(foundCategory)
-    } catch (error) {
+    } catch {
       toast({
         title: "错误",
         description: "加载数据失败",
@@ -84,10 +78,18 @@ export default function CategoryItemsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [categoryId, navigationId, toast])
+
+  useEffect(() => {
+    if (!navigationId || !categoryId) {
+      router.push('/admin/navigation')
+      return
+    }
+    fetchData()
+  }, [categoryId, fetchData, navigationId, router])
 
   const addItem = async (values: NavigationSubItem) => {
-    if (!params?.id || !navigation || !category) return
+    if (!navigationId || !navigation || !category) return
 
     try {
       const updatedCategory = {
@@ -102,7 +104,7 @@ export default function CategoryItemsPage() {
         )
       }
 
-      const response = await fetch(`/api/navigation/${params.id}`, {
+      const response = await fetch(`/api/navigation/${navigationId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedNavigation)
@@ -118,7 +120,7 @@ export default function CategoryItemsPage() {
         title: "成功",
         description: "添加成功"
       })
-    } catch (error) {
+    } catch {
       toast({
         title: "错误",
         description: "保存失败",
@@ -128,7 +130,7 @@ export default function CategoryItemsPage() {
   }
 
   const updateItem = async (index: number, values: NavigationSubItem) => {
-    if (!params?.id || !navigation || !category) return
+    if (!navigationId || !navigation || !category) return
 
     try {
       const updatedItems = [...(category.items || [])]
@@ -148,7 +150,7 @@ export default function CategoryItemsPage() {
         ),
       };
 
-      const response = await fetch(`/api/navigation/${params.id}`, {
+      const response = await fetch(`/api/navigation/${navigationId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedNavigation)
@@ -165,7 +167,7 @@ export default function CategoryItemsPage() {
         title: "成功",
         description: "更新成功"
       })
-    } catch (error) {
+    } catch {
       toast({
         title: "错误",
         description: "更新失败",
@@ -175,7 +177,7 @@ export default function CategoryItemsPage() {
   }
 
   const deleteItem = async (index: number) => {
-    if (!params?.id || !navigation || !category) return
+    if (!navigationId || !navigation || !category) return
 
     try {
       const updatedItems = [...(category.items || [])]
@@ -193,7 +195,7 @@ export default function CategoryItemsPage() {
         )
       }
 
-      const response = await fetch(`/api/navigation/${params.id}`, {
+      const response = await fetch(`/api/navigation/${navigationId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedNavigation)
@@ -210,7 +212,7 @@ export default function CategoryItemsPage() {
         title: "成功",
         description: "删除成功"
       })
-    } catch (error) {
+    } catch {
       toast({
         title: "错误",
         description: "删除失败",
@@ -234,7 +236,7 @@ export default function CategoryItemsPage() {
   };
 
   const updateItemsOrder = async (newItems: NavigationSubItem[]) => {
-    if (!params?.id || !category) return;
+    if (!navigationId || !category) return;
 
     try {
       const updatedCategory = {
@@ -251,7 +253,7 @@ export default function CategoryItemsPage() {
         ),
       };
 
-      const response = await fetch(`/api/navigation/${params.id}`, {
+      const response = await fetch(`/api/navigation/${navigationId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedNavigation),
@@ -261,7 +263,7 @@ export default function CategoryItemsPage() {
 
       const data = await response.json();
       setNavigation(data);
-    } catch (error) {
+    } catch {
       toast({
         title: "错误",
         description: "更新顺序失败",
@@ -271,7 +273,7 @@ export default function CategoryItemsPage() {
   };
 
   const moveItem = async (fromIndex: number, toIndex: number) => {
-    if (!params?.id || !navigation || !category?.items) return
+    if (!navigationId || !navigation || !category?.items) return
 
     try {
       const newItems = [...category.items]
@@ -290,7 +292,7 @@ export default function CategoryItemsPage() {
         )
       }
 
-      const response = await fetch(`/api/navigation/${params.id}`, {
+      const response = await fetch(`/api/navigation/${navigationId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedNavigation)
@@ -306,7 +308,7 @@ export default function CategoryItemsPage() {
         title: "成功",
         description: "移动成功"
       })
-    } catch (error) {
+    } catch {
       toast({
         title: "错误",
         description: "移动失败",

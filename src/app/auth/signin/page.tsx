@@ -2,6 +2,7 @@
 
 import { FormEvent, Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Icons } from '@/components/icons'
@@ -156,9 +157,11 @@ function SignInContent() {
         <div className="relative z-20 flex items-center text-lg font-medium">
           <div className="flex items-center gap-2">
             <div className="relative h-8 w-8 overflow-hidden rounded-md">
-              <img
+              <Image
                 src="/assets/images/alogo.webp"
                 alt="Logo"
+                fill
+                sizes="32px"
                 className="object-cover"
               />
             </div>

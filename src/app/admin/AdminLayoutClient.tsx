@@ -3,6 +3,7 @@
 import { installAdminUnauthorizedRedirect } from '@/lib/admin-unauthorized-redirect'
 import { useState, type ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
+import Image from 'next/image'
 import Link from 'next/link'
 import { signOut } from 'next-auth/react'
 import { useTheme } from 'next-themes'
@@ -130,10 +131,12 @@ export function AdminLayoutClient({ children, user }: AdminLayoutClientProps) {
     >
       <div className={cn('flex min-w-0 items-center gap-2', collapsed && 'flex-col')}>
         <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-md">
-          <img
+          <Image
             src="/assets/images/alogo.webp"
             alt="Logo"
-            className="h-full w-full object-cover"
+            fill
+            sizes="32px"
+            className="object-cover"
           />
         </div>
         {!collapsed && (
@@ -332,10 +335,12 @@ export function AdminLayoutClient({ children, user }: AdminLayoutClientProps) {
             <SheetHeader className="border-b px-4 py-4 text-left">
               <SheetTitle className="flex items-center gap-2">
                 <span className="relative h-8 w-8 overflow-hidden rounded-md">
-                  <img
+                  <Image
                     src="/assets/images/alogo.webp"
                     alt="Logo"
-                    className="h-full w-full object-cover"
+                    fill
+                    sizes="32px"
+                    className="object-cover"
                   />
                 </span>
                 NavSphere
@@ -349,10 +354,12 @@ export function AdminLayoutClient({ children, user }: AdminLayoutClientProps) {
 
         <Link href="/admin" className="flex min-w-0 flex-1 items-center gap-2">
           <span className="relative h-7 w-7 shrink-0 overflow-hidden rounded-md">
-            <img
+            <Image
               src="/assets/images/alogo.webp"
               alt="Logo"
-              className="h-full w-full object-cover"
+              fill
+              sizes="28px"
+              className="object-cover"
             />
           </span>
           <span className="truncate font-semibold">NavSphere</span>

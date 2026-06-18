@@ -1,38 +1,19 @@
 'use client'
 export const runtime = 'edge'
 
-import * as React from "react"
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { useToast } from '@/components/ui/use-toast'
-import { Icons } from '@/components/icons'
-import { NavigationItem, NavigationSubItem } from '@/types/navigation'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { NavigationCategory, NavigationItem } from '@/types/navigation'
 
 export default function SubCategoryItemsPage() {
   const params = useParams()
   const router = useRouter()
   const { toast } = useToast()
-  const [isLoading, setIsLoading] = useState(false)
   const [category, setCategory] = useState<NavigationItem | null>(null)
-  const [subCategory, setSubCategory] = useState<NavigationSubItem | null>(null)
-  const [editingId, setEditingId] = useState<number | null>(null)
+  const [subCategory, setSubCategory] = useState<NavigationCategory | null>(null)
 
-  useEffect(() => {
-    fetchData()
-  }, [])
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       if (!params?.id) {
         throw new Error('Navigation ID not found')
@@ -44,13 +25,13 @@ export default function SubCategoryItemsPage() {
       const data = await response.json()
       setCategory(data)
       
-      const sub = data.subCategories?.find((s: NavigationSubItem) => String(s.id) === params.subId)
+      const sub = data.subCategories?.find((s: NavigationCategory) => String(s.id) === params.subId)
       if (sub) {
         setSubCategory(sub)
       } else {
         throw new Error('Subcategory not found')
       }
-    } catch (error) {
+    } catch {
       toast({
         title: '错误',
         description: '加载数据失败',
@@ -58,7 +39,11 @@ export default function SubCategoryItemsPage() {
       })
       router.back()
     }
-  }
+  }, [params?.id, params?.subId, router, toast])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
 
   // ... 添加其他必要的函数
 
@@ -81,4 +66,4 @@ export default function SubCategoryItemsPage() {
       {/* ... 添加表格和其他内容 */}
     </div>
   )
-} 
+}

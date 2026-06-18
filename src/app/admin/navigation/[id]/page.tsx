@@ -2,7 +2,7 @@
 
 export const runtime = 'edge'
 
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Button } from "@/registry/new-york/ui/button"
 import { useToast } from "@/registry/new-york/hooks/use-toast"
@@ -23,10 +23,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/registry/new-york/ui/dropdown-menu"
-import { Skeleton } from "@/registry/new-york/ui/skeleton"
 import { 
   MoreHorizontal, 
-  Search, 
   Inbox,
   FolderTree,
   Edit,
@@ -37,47 +35,45 @@ export default function NavigationPage() {
   const params = useParams()
   const router = useRouter()
   const { toast } = useToast()
+  const navigationId = params?.id as string | undefined
   const [items, setItems] = useState<NavigationItem[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [searchQuery, setSearchQuery] = useState("")
 
-  useEffect(() => {
-    if (!params?.id) {
-      router.push('/admin/navigation')
-      return
-    }
-    fetchItems()
-  }, [params?.id, router])
+  const fetchItems = useCallback(async () => {
+    if (!navigationId) return
 
-  const fetchItems = async () => {
     try {
-      setIsLoading(true)
-      const response = await fetch(`/api/navigation/${params!.id}/items`)
+      const response = await fetch(`/api/navigation/${navigationId}/items`)
       if (!response.ok) throw new Error('Failed to fetch')
       const data = await response.json()
       setItems(data)
-    } catch (error) {
+    } catch {
       toast({
         title: "错误",
         description: "加载数据失败",
         variant: "destructive"
       })
-    } finally {
-      setIsLoading(false)
     }
-  }
+  }, [navigationId, toast])
+
+  useEffect(() => {
+    if (!navigationId) {
+      router.push('/admin/navigation')
+      return
+    }
+    fetchItems()
+  }, [fetchItems, navigationId, router])
 
   const handleItemsManage = (itemId: string) => {
-    router.push(`/admin/navigation/${params!.id}/items/${itemId}`)
+    router.push(`/admin/navigation/${navigationId}/items/${itemId}`)
   }
 
   const handleCategoryManage = (itemId: string) => {
-    router.push(`/admin/navigation/${params!.id}/categories/${itemId}`)
+    router.push(`/admin/navigation/${navigationId}/categories/${itemId}`)
   }
 
   const handleEdit = async (item: NavigationItem) => {
     try {
-      const response = await fetch(`/api/navigation/${params!.id}`, {
+      const response = await fetch(`/api/navigation/${navigationId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(item)
@@ -90,7 +86,7 @@ export default function NavigationPage() {
         title: "成功",
         description: "更新成功"
       })
-    } catch (error) {
+    } catch {
       toast({
         title: "错误",
         description: "更新失败",
@@ -103,7 +99,7 @@ export default function NavigationPage() {
     if (!confirm('确定要删除这个导航吗？')) return
 
     try {
-      const response = await fetch(`/api/navigation/${params!.id}`, {
+      const response = await fetch(`/api/navigation/${navigationId}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: itemId })
@@ -116,7 +112,7 @@ export default function NavigationPage() {
         title: "成功",
         description: "删除成功"
       })
-    } catch (error) {
+    } catch {
       toast({
         title: "错误",
         description: "删除失败",
@@ -124,10 +120,6 @@ export default function NavigationPage() {
       })
     }
   }
-
-  const filteredItems = items.filter(item => 
-    item.title.toLowerCase().includes(searchQuery.toLowerCase())
-  )
 
   return (
     <div className="space-y-6">
@@ -142,24 +134,17 @@ export default function NavigationPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredItems.length === 0 ? (
+            {items.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={4} className="text-center py-8">
-                  {searchQuery ? (
-                    <div className="text-muted-foreground">
-                      <Search className="mx-auto h-12 w-12 opacity-50" />
-                      <p className="mt-2">没有找到匹配的导航</p>
-                    </div>
-                  ) : (
-                    <div className="text-muted-foreground">
-                      <Inbox className="mx-auto h-12 w-12 opacity-50" />
-                      <p className="mt-2">暂无导航数据</p>
-                    </div>
-                  )}
+                  <div className="text-muted-foreground">
+                    <Inbox className="mx-auto h-12 w-12 opacity-50" />
+                    <p className="mt-2">暂无导航数据</p>
+                  </div>
                 </TableCell>
               </TableRow>
             ) : (
-              filteredItems.map((item, index) => (
+              items.map((item, index) => (
                 <TableRow key={item.id}>
                   <TableCell>{index + 1}</TableCell>
                   <TableCell>{item.title}</TableCell>

@@ -1,7 +1,7 @@
 'use client'
 export const runtime = 'edge'
 
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { NavigationItem, NavigationCategory } from '@/types/navigation'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -57,7 +57,6 @@ export default function DataManagementPage() {
   const [jsonError, setJsonError] = useState('')
   const [dataStats, setDataStats] = useState({ categories: 0, items: 0, size: 0 })
 
-  const [editorErrors, setEditorErrors] = useState<string[]>([])
   const [defaultFileStatus, setDefaultFileStatus] = useState({ exists: false, valid: false, itemCount: 0, checked: false })
   const [historyVersions, setHistoryVersions] = useState<NavigationHistorySummary[]>([])
   const [historyLimit, setHistoryLimit] = useState(10)
@@ -68,7 +67,7 @@ export default function DataManagementPage() {
   const { toast } = useToast()
 
   // 检查默认文件状态
-  const checkDefaultFile = async () => {
+  const checkDefaultFile = useCallback(async () => {
     try {
       const response = await fetch('/api/navigation/check-default')
       if (response.ok) {
@@ -81,9 +80,9 @@ export default function DataManagementPage() {
       console.error('Failed to check default file:', error)
       setDefaultFileStatus({ exists: false, valid: false, itemCount: 0, checked: true })
     }
-  }
+  }, [])
 
-  const loadHistoryVersions = async () => {
+  const loadHistoryVersions = useCallback(async () => {
     setIsLoadingHistory(true)
     try {
       const response = await fetch('/api/navigation/history')
@@ -105,7 +104,7 @@ export default function DataManagementPage() {
     } finally {
       setIsLoadingHistory(false)
     }
-  }
+  }, [toast])
 
   const openRestoreDialog = (open: boolean) => {
     setIsRestoreDialogOpen(open)
@@ -118,7 +117,7 @@ export default function DataManagementPage() {
   }
 
   // 验证JSON格式并更新统计信息
-  const validateJson = (jsonString: string) => {
+  const validateJson = useCallback((jsonString: string) => {
     try {
       const parsed = JSON.parse(jsonString)
       setIsJsonValid(true)
@@ -145,10 +144,10 @@ export default function DataManagementPage() {
       setJsonError((error as Error).message)
       return false
     }
-  }
+  }, [])
 
   // 加载当前导航数据
-  const loadNavigationData = async () => {
+  const loadNavigationData = useCallback(async () => {
     setIsLoading(true)
     try {
       const response = await fetch('/api/navigation')
@@ -170,7 +169,7 @@ export default function DataManagementPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [toast, validateJson])
 
   const previewHistoryVersion = async (versionId: string) => {
     setIsLoadingHistory(true)
@@ -324,7 +323,7 @@ export default function DataManagementPage() {
   }
 
   // 保存数据
-  const saveData = async () => {
+  const saveData = useCallback(async () => {
     if (!validateJson(navigationData)) {
       toast({
         title: "错误",
@@ -372,7 +371,7 @@ export default function DataManagementPage() {
     } finally {
       setIsSaving(false)
     }
-  }
+  }, [loadHistoryVersions, navigationData, toast, validateJson])
 
   const cacheFavicons = async () => {
     setIsCachingIcons(true)
@@ -419,7 +418,7 @@ export default function DataManagementPage() {
 
 
   // 下载数据到本地
-  const downloadData = () => {
+  const downloadData = useCallback(() => {
     if (!validateJson(navigationData)) {
       toast({
         title: "错误",
@@ -456,7 +455,7 @@ export default function DataManagementPage() {
         variant: "destructive",
       })
     }
-  }
+  }, [navigationData, toast, validateJson])
 
   // 上传JSON文件
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -541,7 +540,6 @@ export default function DataManagementPage() {
   // 处理编辑器验证
   const handleEditorValidate = (isValid: boolean, errors: string[]) => {
     setIsJsonValid(isValid)
-    setEditorErrors(errors)
     if (!isValid && errors.length > 0) {
       setJsonError(errors[0])
     } else {
@@ -568,7 +566,7 @@ export default function DataManagementPage() {
     loadNavigationData()
     checkDefaultFile()
     loadHistoryVersions()
-  }, [])
+  }, [checkDefaultFile, loadHistoryVersions, loadNavigationData])
 
   // Monaco Editor 事件监听
   useEffect(() => {
@@ -599,7 +597,7 @@ export default function DataManagementPage() {
       window.removeEventListener('monaco-refresh', handleMonacoRefresh)
       window.removeEventListener('monaco-download', handleMonacoDownload)
     }
-  }, [isSaving, isLoading, isJsonValid, navigationData])
+  }, [downloadData, isSaving, isLoading, isJsonValid, loadNavigationData, saveData])
 
   return (
     <div className="space-y-5 sm:space-y-6">

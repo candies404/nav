@@ -2,8 +2,7 @@
 
 export const runtime = 'edge'
 
-import { useState, useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from "@/registry/new-york/ui/button"
 import { useToast } from "@/registry/new-york/hooks/use-toast"
 import { Icons } from "@/components/icons"
@@ -14,7 +13,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-  DialogDescription,
   DialogFooter,
 } from "@/registry/new-york/ui/dialog"
 
@@ -105,8 +103,11 @@ export default function SiteListPage() {
   const [isBatchDeleting, setIsBatchDeleting] = useState(false)
   const [isFetchingAddMetadata, setIsFetchingAddMetadata] = useState(false)
   const [isFetchingEditMetadata, setIsFetchingEditMetadata] = useState(false)
+  const isInitialLoadingRef = useRef(true)
   const lastFetchedAddUrl = useRef<string>('')
   const lastFetchedEditUrl = useRef<string>('')
+  const isFetchingAddMetadataRef = useRef(false)
+  const isFetchingEditMetadataRef = useRef(false)
   const [newSite, setNewSite] = useState({
     name: '',
     url: '',
@@ -126,50 +127,7 @@ export default function SiteListPage() {
     isPrivate: false
   })
 
-
-  useEffect(() => {
-    fetchSites()
-  }, [])
-
-  // 监听添加站点URL变化，自动获取网站信息
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (newSite.url &&
-        isValidUrl(newSite.url) &&
-        showAddDialog &&
-        !isFetchingAddMetadata &&
-        newSite.url !== lastFetchedAddUrl.current) {
-        lastFetchedAddUrl.current = newSite.url
-        fetchWebsiteMetadata(newSite.url, false, true)
-      }
-    }, 1000) // 延迟1秒执行，避免频繁请求
-
-    return () => clearTimeout(timeoutId)
-  }, [newSite.url, showAddDialog])
-
-  // 监听编辑站点URL变化，自动获取网站信息
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (editSite.url &&
-        isValidUrl(editSite.url) &&
-        showEditDialog &&
-        editingSite &&
-        !isFetchingEditMetadata &&
-        editSite.url !== lastFetchedEditUrl.current) {
-        // 只有当URL与原始URL不同时才自动获取
-        if (editSite.url !== editingSite.url) {
-          lastFetchedEditUrl.current = editSite.url
-          fetchWebsiteMetadata(editSite.url, true, true)
-        }
-      }
-    }, 1000)
-
-    return () => clearTimeout(timeoutId)
-  }, [editSite.url, showEditDialog, editingSite])
-
-
-
-  const extractSites = (navigationItems: Category[]): Site[] => {
+  const extractSites = useCallback((navigationItems: Category[]): Site[] => {
     let allSites: Site[] = [];
 
     navigationItems.forEach((category: Category) => {
@@ -207,10 +165,10 @@ export default function SiteListPage() {
     });
 
     return allSites;
-  };
+  }, []);
 
-  const fetchSites = async () => {
-    if (!isInitialLoading) setIsLoading(true);
+  const fetchSites = useCallback(async () => {
+    if (!isInitialLoadingRef.current) setIsLoading(true);
     try {
       const response = await fetch('/api/navigation');
       if (!response.ok) throw new Error('Failed to fetch');
@@ -232,9 +190,14 @@ export default function SiteListPage() {
       setSites([]);
     } finally {
       setIsLoading(false);
+      isInitialLoadingRef.current = false;
       setIsInitialLoading(false);
     }
-  };
+  }, [extractSites, toast]);
+
+  useEffect(() => {
+    fetchSites()
+  }, [fetchSites])
 
   // 获取站点所属的分类
   const getSiteCategory = (siteId: string): string => {
@@ -870,23 +833,24 @@ export default function SiteListPage() {
     )
   }
 
-  const isValidUrl = (string: string): boolean => {
+  const isValidUrl = useCallback((string: string): boolean => {
     try {
       new URL(string)
       return true
-    } catch (_) {
+    } catch {
       return false
     }
-  }
+  }, [])
 
-  const fetchWebsiteMetadata = async (url: string, isEdit: boolean = false, forceUpdate: boolean = false) => {
+  const fetchWebsiteMetadata = useCallback(async (url: string, isEdit: boolean = false, forceUpdate: boolean = false) => {
     const setFetching = isEdit ? setIsFetchingEditMetadata : setIsFetchingAddMetadata
     const setSite = isEdit ? setEditSite : setNewSite
     const site = isEdit ? editSite : newSite
+    const fetchingRef = isEdit ? isFetchingEditMetadataRef : isFetchingAddMetadataRef
 
-    const isFetching = isEdit ? isFetchingEditMetadata : isFetchingAddMetadata
-    if (isFetching) return
+    if (fetchingRef.current) return
 
+    fetchingRef.current = true
     setFetching(true)
     try {
       const response = await fetch('/api/website-metadata', {
@@ -939,9 +903,46 @@ export default function SiteListPage() {
     // 确保在所有操作完成后设置loading状态为false
     // 使用setTimeout确保状态更新不被批处理影响
     setTimeout(() => {
+      fetchingRef.current = false
       setFetching(false)
     }, 0)
-  }
+  }, [editSite, newSite, toast])
+
+  // 监听添加站点URL变化，自动获取网站信息
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (newSite.url &&
+        isValidUrl(newSite.url) &&
+        showAddDialog &&
+        !isFetchingAddMetadataRef.current &&
+        newSite.url !== lastFetchedAddUrl.current) {
+        lastFetchedAddUrl.current = newSite.url
+        fetchWebsiteMetadata(newSite.url, false, true)
+      }
+    }, 1000) // 延迟1秒执行，避免频繁请求
+
+    return () => clearTimeout(timeoutId)
+  }, [fetchWebsiteMetadata, isValidUrl, newSite.url, showAddDialog])
+
+  // 监听编辑站点URL变化，自动获取网站信息
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (editSite.url &&
+        isValidUrl(editSite.url) &&
+        showEditDialog &&
+        editingSite &&
+        !isFetchingEditMetadataRef.current &&
+        editSite.url !== lastFetchedEditUrl.current) {
+        // 只有当URL与原始URL不同时才自动获取
+        if (editSite.url !== editingSite.url) {
+          lastFetchedEditUrl.current = editSite.url
+          fetchWebsiteMetadata(editSite.url, true, true)
+        }
+      }
+    }, 1000)
+
+    return () => clearTimeout(timeoutId)
+  }, [editSite.url, editingSite, fetchWebsiteMetadata, isValidUrl, showEditDialog])
 
   const handleIconUpload = async (file: File, isEdit: boolean = false) => {
     const setUploading = isEdit ? setIsUploadingEditIcon : setIsUploadingAddIcon

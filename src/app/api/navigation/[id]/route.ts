@@ -20,7 +20,7 @@ export async function GET(
     }
 
     return NextResponse.json(item)
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to fetch navigation item' }, { status: 500 })
   }
 }

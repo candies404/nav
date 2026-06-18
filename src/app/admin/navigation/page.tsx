@@ -103,7 +103,7 @@ export default function NavigationPage() {
         title: "成功",
         description: "移动成功"
       })
-    } catch (error) {
+    } catch {
       toast({
         title: "错误",
         description: "移动失败",
@@ -125,7 +125,7 @@ export default function NavigationPage() {
         title: "成功",
         description: "移动成功"
       })
-    } catch (error) {
+    } catch {
       toast({
         title: "错误",
         description: "移动失败",
@@ -182,7 +182,7 @@ export default function NavigationPage() {
         description: "排序已更新"
       })
 
-    } catch (error) {
+    } catch {
       // 回滚到原始状态
       await mutate(originalItems, { revalidate: false })
 

@@ -74,7 +74,7 @@ export function AddNavigationForm({
         title: defaultValues ? "更新成功" : "添加成功",
         description: `导航项 "${values.title}" 已${defaultValues ? "更新" : "添加"}`,
       })
-    } catch (error) {
+    } catch {
       toast({
         title: "操作失败",
         description: "请稍后重试",

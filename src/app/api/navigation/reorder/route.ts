@@ -13,7 +13,7 @@ export async function POST(request: Request) {
       return new Response('Unauthorized', { status: 401 })
     }
 
-    const { sourceIndex, destinationIndex, itemId } = await request.json()
+    const { sourceIndex, destinationIndex } = await request.json()
 
     // 获取当前导航数据
     const data = await getFileContent('src/navsphere/content/navigation.json') as NavigationData

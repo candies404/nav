@@ -2,7 +2,7 @@
 
 export const runtime = 'edge'
 
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Button } from "@/registry/new-york/ui/button"
 import { useToast } from "@/registry/new-york/hooks/use-toast"
@@ -69,6 +69,7 @@ export default function ItemsPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
   const { toast } = useToast()
+  const navigationId = params?.id
   const [navigation, setNavigation] = useState<NavigationItem | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [enabledFilter, setEnabledFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
@@ -77,31 +78,19 @@ export default function ItemsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
 
-  useEffect(() => {
-    if (!params?.id) {
-      router.push('/admin/navigation')
-      return
-    }
-    fetchNavigation()
-  }, [params?.id, router])
-
-  const fetchNavigation = async () => {
+  const fetchNavigation = useCallback(async () => {
     setIsLoading(true)
     try {
-      if (!params?.id) {
+      if (!navigationId) {
         throw new Error('Navigation ID not found')
       }
 
-      const navigationId = params?.id
-      if (!navigationId) {
-        throw new Error('Navigation ID is missing')
-      }
       const response = await fetch(`/api/navigation/${navigationId}`)
       if (!response.ok) throw new Error('Failed to fetch')
 
       const data = await response.json()
       setNavigation(data)
-    } catch (error) {
+    } catch {
       toast({
         title: "错误",
         description: "获取数据失败",
@@ -110,18 +99,22 @@ export default function ItemsPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [navigationId, toast])
+
+  useEffect(() => {
+    if (!navigationId) {
+      router.push('/admin/navigation')
+      return
+    }
+    fetchNavigation()
+  }, [fetchNavigation, navigationId, router])
 
   const addItem = async (values: NavigationSubItem) => {
     try {
-      if (!params?.id || !navigation) {
+      if (!navigationId || !navigation) {
         throw new Error('Navigation ID or data not found')
       }
 
-      const navigationId = params?.id
-      if (!navigationId) {
-        throw new Error('Navigation ID is missing')
-      }
       const response = await fetch(`/api/navigation/${navigationId}/items`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -136,7 +129,7 @@ export default function ItemsPage() {
         description: "添加成功"
       })
       setIsAddDialogOpen(false)
-    } catch (error) {
+    } catch {
       toast({
         title: "错误",
         description: "保存失败",
@@ -149,14 +142,10 @@ export default function ItemsPage() {
 
   const updateItem = async (index: number, values: NavigationSubItem) => {
     try {
-      if (!params?.id || !navigation) {
+      if (!navigationId || !navigation) {
         throw new Error('Navigation ID or data not found')
       }
 
-      const navigationId = params?.id
-      if (!navigationId) {
-        throw new Error('Navigation ID is missing')
-      }
       const items = [...(navigation.items || [])]
       items[index] = values
 
@@ -182,7 +171,7 @@ export default function ItemsPage() {
         description: "保存成功"
       })
       setEditingItem(null)
-    } catch (error) {
+    } catch {
       toast({
         title: "错误",
         description: "保存失败",
@@ -193,13 +182,8 @@ export default function ItemsPage() {
 
   const deleteItem = async (index: number) => {
     try {
-      if (!params?.id) {
-        throw new Error('Navigation ID not found')
-      }
-
-      const navigationId = params?.id
       if (!navigationId) {
-        throw new Error('Navigation ID is missing')
+        throw new Error('Navigation ID not found')
       }
 
       const response = await fetch(`/api/navigation/${navigationId}/items`, {
@@ -216,7 +200,7 @@ export default function ItemsPage() {
         description: "删除成功"
       })
       setDeletingItem(null)
-    } catch (error) {
+    } catch {
       toast({
         title: "错误",
         description: "删除失败",
@@ -233,7 +217,6 @@ export default function ItemsPage() {
     items.splice(result.destination.index, 0, reorderedItem)
 
     try {
-      const navigationId = params?.id
       if (!navigationId) {
         throw new Error('Navigation ID is missing')
       }
@@ -253,87 +236,12 @@ export default function ItemsPage() {
         title: "成功",
         description: "项目顺序已更新"
       })
-    } catch (error) {
+    } catch {
       toast({
         title: "错误",
         description: "保存顺序失败",
         variant: "destructive"
       })
-    }
-  }
-
-  const moveToTop = async (index: number) => {
-    if (index > 0) {
-      const items = Array.from(navigation?.items || [])
-      const [reorderedItem] = items.splice(index, 1)
-      items.unshift(reorderedItem)
-
-      try {
-        const navigationId = params?.id
-        if (!navigationId) {
-          throw new Error('Navigation ID is missing')
-        }
-        const response = await fetch(`/api/navigation/${navigationId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...navigation,
-            items
-          })
-        })
-
-        if (!response.ok) throw new Error('Failed to save order')
-
-        await fetchNavigation() // Refresh data
-        toast({
-          title: "成功",
-          description: "项目顺序已更新"
-        })
-      } catch (error) {
-        toast({
-          title: "错误",
-          description: "保存顺序失败",
-          variant: "destructive"
-        })
-      }
-    }
-  }
-
-  const moveToBottom = async (index: number) => {
-    if (!navigation?.items) return
-    if (index < navigation.items.length - 1) {
-      const items = Array.from(navigation?.items || [])
-      const [reorderedItem] = items.splice(index, 1)
-      items.push(reorderedItem)
-
-      try {
-        const navigationId = params?.id
-        if (!navigationId) {
-          throw new Error('Navigation ID is missing')
-        }
-        const response = await fetch(`/api/navigation/${navigationId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...navigation,
-            items
-          })
-        })
-
-        if (!response.ok) throw new Error('Failed to save order')
-
-        await fetchNavigation() // Refresh data
-        toast({
-          title: "成功",
-          description: "项目顺序已更新"
-        })
-      } catch (error) {
-        toast({
-          title: "错误",
-          description: "保存顺序失败",
-          variant: "destructive"
-        })
-      }
     }
   }
 

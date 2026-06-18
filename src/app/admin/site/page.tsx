@@ -24,7 +24,6 @@ import {
   FormMessage,
 } from "@/registry/new-york/ui/form"
 import { SiteConfigService} from "@/services/siteConfigService"
-import type { SiteConfig } from "@/types/site"
 import { Toaster } from "@/registry/new-york/ui/toaster"
 
 const formSchema = z.object({
@@ -81,7 +80,7 @@ export default function SiteSettings() {
       }
     }
     loadConfig()
-  }, [])
+  }, [form])
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     try {

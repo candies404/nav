@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { Button } from "@/registry/new-york/ui/button"
-import { Input } from "@/registry/new-york/ui/input"
 import {
   Popover,
   PopoverContent,
@@ -73,4 +72,4 @@ export function IconPicker({ value, onChange }: IconPickerProps) {
       </PopoverContent>
     </Popover>
   )
-} 
+}
