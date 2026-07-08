@@ -1,12 +1,14 @@
 'use client'
 
+import Image from 'next/image'
 import { useState, useRef, useEffect } from 'react'
 import { Input } from '@/registry/new-york/ui/input'
 import { Command, CommandList, CommandGroup, CommandItem } from '@/registry/new-york/ui/command'
-import { Search, X } from 'lucide-react'
+import { ExternalLink, Search, X } from 'lucide-react'
 import { Button } from '@/registry/new-york/ui/button'
 import type { NavigationItem, NavigationSubItem } from '@/types/navigation'
 import type { SiteConfig } from '@/types/site'
+import { getNavigationItemElementId } from '@/lib/navigation-anchor'
 
 interface SearchBarProps {
   onSearch: (query: string) => void
@@ -72,6 +74,15 @@ export function SearchBar({ onSearch, searchResults, searchQuery, siteConfig }: 
   }
 
   const handleItemSelect = (item: NavigationItem | NavigationSubItem) => {
+    const element = document.getElementById(getNavigationItemElementId(item.id))
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+    onSearch('')
+    setIsFocused(false)
+  }
+
+  const openItemLink = (item: NavigationItem | NavigationSubItem) => {
     const itemWithHref = item as NavigationSubItem
     if (itemWithHref.href) {
       const linkTarget = siteConfig?.navigation?.linkTarget || '_blank'
@@ -81,8 +92,6 @@ export function SearchBar({ onSearch, searchResults, searchQuery, siteConfig }: 
         window.open(itemWithHref.href, linkTarget)
       }
     }
-    onSearch('')
-    setIsFocused(false)
   }
 
   const clearSearch = () => {
@@ -148,13 +157,12 @@ export function SearchBar({ onSearch, searchResults, searchQuery, siteConfig }: 
                       >
                         <div className="h-7 w-7 flex-shrink-0 sm:h-8 sm:w-8">
                           {item.icon && (
-                            <img
+                            <Image
                               src={item.icon}
                               alt={`${item.title} icon`}
                               width={32}
                               height={32}
-                              loading="lazy"
-                              decoding="async"
+                              unoptimized
                               className="w-full h-full object-contain rounded"
                               onError={(e) => {
                                 const target = e.target as HTMLImageElement
@@ -173,6 +181,22 @@ export function SearchBar({ onSearch, searchResults, searchQuery, siteConfig }: 
                             </span>
                           )}
                         </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0"
+                          title="打开站点"
+                          aria-label={`打开 ${item.title}`}
+                          onMouseDown={(event) => event.stopPropagation()}
+                          onClick={(event) => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                            openItemLink(item)
+                          }}
+                        >
+                          <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                        </Button>
                       </CommandItem>
                     ))}
                     {result.subCategories.map((sub) => (
@@ -189,13 +213,12 @@ export function SearchBar({ onSearch, searchResults, searchQuery, siteConfig }: 
                           >
                             <div className="h-7 w-7 flex-shrink-0 sm:h-8 sm:w-8">
                               {item.icon && (
-                                <img
+                                <Image
                                   src={item.icon}
                                   alt={`${item.title} icon`}
                                   width={32}
                                   height={32}
-                                  loading="lazy"
-                                  decoding="async"
+                                  unoptimized
                                   className="w-full h-full object-contain rounded"
                                   onError={(e) => {
                                     const target = e.target as HTMLImageElement
@@ -214,6 +237,22 @@ export function SearchBar({ onSearch, searchResults, searchQuery, siteConfig }: 
                                 </span>
                               )}
                             </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 shrink-0"
+                              title="打开站点"
+                              aria-label={`打开 ${item.title}`}
+                              onMouseDown={(event) => event.stopPropagation()}
+                              onClick={(event) => {
+                                event.preventDefault()
+                                event.stopPropagation()
+                                openItemLink(item)
+                              }}
+                            >
+                              <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                            </Button>
                           </CommandItem>
                         ))}
                       </div>

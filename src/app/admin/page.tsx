@@ -88,7 +88,13 @@ export default function AdminDashboard() {
       title: '导航管理',
       icon: Menu,
       href: '/admin/navigation',
-      description: '管理网站的导航菜单分类和子项目'
+      description: '管理一级分类、二级分类和分类排序'
+    },
+    {
+      title: '站点管理',
+      icon: Globe,
+      href: '/admin/sitelist',
+      description: '集中新增、编辑、移动和删除具体网站'
     },
     {
       title: '资源管理',
@@ -135,7 +141,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* 原有的功能卡片 */}
-      <div className="grid gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-4">
         {dashboardItems.map(item => (
           <Link key={item.href} href={item.href}>
             <Card className="hover:shadow-lg transition-shadow cursor-pointer">

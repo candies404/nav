@@ -2,6 +2,7 @@
 
 export const runtime = 'edge'
 
+import Image from 'next/image'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from "@/registry/new-york/ui/button"
 import { useToast } from "@/registry/new-york/hooks/use-toast"
@@ -75,6 +76,7 @@ interface Site {
   name: string
   url: string
   description?: string
+  enabled?: boolean
   isPrivate?: boolean
   createdAt: string
   updatedAt: string
@@ -94,6 +96,13 @@ export default function SiteListPage() {
   const [navigationData, setNavigationData] = useState<Category[]>([])
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [subCategoryFilter, setSubCategoryFilter] = useState<string>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
+  const [showSortDialog, setShowSortDialog] = useState(false)
+  const [sortCategoryId, setSortCategoryId] = useState('')
+  const [sortSubCategoryId, setSortSubCategoryId] = useState('none')
+  const [sortItems, setSortItems] = useState<NavigationSubItem[]>([])
+  const [sortOriginalItemIds, setSortOriginalItemIds] = useState<string[]>([])
+  const [isSortSaving, setIsSortSaving] = useState(false)
   const [isAddingSubmitting, setIsAddingSubmitting] = useState(false)
   const [isEditingSubmitting, setIsEditingSubmitting] = useState(false)
   const [showDeleteSiteDialog, setShowDeleteSiteDialog] = useState(false)
@@ -115,6 +124,7 @@ export default function SiteListPage() {
     icon: '',
     categoryId: '',
     subCategoryId: '',
+    enabled: true,
     isPrivate: false
   })
   const [editSite, setEditSite] = useState({
@@ -124,8 +134,25 @@ export default function SiteListPage() {
     icon: '',
     categoryId: '',
     subCategoryId: '',
+    enabled: true,
     isPrivate: false
   })
+
+  const applyCategoryFilterFromUrl = useCallback(() => {
+    if (typeof window === 'undefined') return
+
+    const searchParams = new URLSearchParams(window.location.search)
+    const categoryId = searchParams.get('categoryId')
+    const subCategoryId = searchParams.get('subCategoryId')
+    if (!categoryId) return
+
+    setCategoryFilter(categoryId)
+    setSubCategoryFilter(subCategoryId || 'all')
+  }, [])
+
+  useEffect(() => {
+    applyCategoryFilterFromUrl()
+  }, [applyCategoryFilterFromUrl])
 
   const extractSites = useCallback((navigationItems: Category[]): Site[] => {
     let allSites: Site[] = [];
@@ -138,6 +165,7 @@ export default function SiteListPage() {
           name: item.title,
           url: item.href,
           description: item.description,
+          enabled: item.enabled ?? true,
           isPrivate: item.isPrivate ?? false,
           createdAt: '',
           updatedAt: '',
@@ -154,6 +182,7 @@ export default function SiteListPage() {
               name: item.title,
               url: item.href,
               description: item.description,
+              enabled: item.enabled ?? true,
               isPrivate: item.isPrivate ?? false,
               createdAt: '',
               updatedAt: '',
@@ -265,6 +294,164 @@ export default function SiteListPage() {
     }
   }
 
+  const getSortItems = useCallback((categoryId: string, subCategoryId: string): NavigationSubItem[] => {
+    const category = navigationData.find((item) => item.id === categoryId)
+    if (!category) return []
+
+    if (subCategoryId === 'none') {
+      return [...(category.items || [])]
+    }
+
+    const subCategory = category.subCategories?.find((item) => item.id === subCategoryId)
+    return [...(subCategory?.items || [])]
+  }, [navigationData])
+
+  const syncSortItems = useCallback((categoryId: string, subCategoryId: string) => {
+    const scopedItems = getSortItems(categoryId, subCategoryId)
+    setSortItems(scopedItems)
+    setSortOriginalItemIds(scopedItems.map((item) => item.id))
+  }, [getSortItems])
+
+  const getInitialSortScope = useCallback(() => {
+    const firstCategoryWithSites = navigationData.find((category) =>
+      (category.items?.length || 0) > 0 ||
+      category.subCategories?.some((subCategory) => (subCategory.items?.length || 0) > 0)
+    )
+    const categoryId = categoryFilter !== 'all'
+      ? categoryFilter
+      : firstCategoryWithSites?.id || navigationData[0]?.id || ''
+
+    if (!categoryId) {
+      return { categoryId: '', subCategoryId: 'none' }
+    }
+
+    if (categoryFilter !== 'all' && subCategoryFilter !== 'all') {
+      return {
+        categoryId,
+        subCategoryId: subCategoryFilter || 'none'
+      }
+    }
+
+    const category = navigationData.find((item) => item.id === categoryId)
+    if ((category?.items?.length || 0) > 0) {
+      return { categoryId, subCategoryId: 'none' }
+    }
+
+    const firstSubCategoryWithSites = category?.subCategories?.find(
+      (subCategory) => (subCategory.items?.length || 0) > 0
+    )
+
+    return {
+      categoryId,
+      subCategoryId: firstSubCategoryWithSites?.id || 'none'
+    }
+  }, [categoryFilter, navigationData, subCategoryFilter])
+
+  const openSortDialog = () => {
+    const { categoryId, subCategoryId } = getInitialSortScope()
+    setSortCategoryId(categoryId)
+    setSortSubCategoryId(subCategoryId)
+    syncSortItems(categoryId, subCategoryId)
+    setShowSortDialog(true)
+  }
+
+  const handleSortCategoryChange = (categoryId: string) => {
+    setSortCategoryId(categoryId)
+    setSortSubCategoryId('none')
+    syncSortItems(categoryId, 'none')
+  }
+
+  const handleSortSubCategoryChange = (subCategoryId: string) => {
+    setSortSubCategoryId(subCategoryId)
+    syncSortItems(sortCategoryId, subCategoryId)
+  }
+
+  const moveSortItem = (fromIndex: number, toIndex: number) => {
+    setSortItems((currentItems) => {
+      if (
+        fromIndex === toIndex ||
+        fromIndex < 0 ||
+        toIndex < 0 ||
+        fromIndex >= currentItems.length ||
+        toIndex >= currentItems.length
+      ) {
+        return currentItems
+      }
+
+      const nextItems = [...currentItems]
+      const [movedItem] = nextItems.splice(fromIndex, 1)
+      nextItems.splice(toIndex, 0, movedItem)
+      return nextItems
+    })
+  }
+
+  const handleSaveSort = async () => {
+    if (!sortCategoryId || isSortSaving) return
+
+    setIsSortSaving(true)
+    try {
+      const updatedNavigationData = navigationData.map((category) => {
+        if (category.id !== sortCategoryId) return category
+
+        if (sortSubCategoryId === 'none') {
+          return {
+            ...category,
+            items: sortItems
+          }
+        }
+
+        return {
+          ...category,
+          subCategories: category.subCategories?.map((subCategory) =>
+            subCategory.id === sortSubCategoryId
+              ? { ...subCategory, items: sortItems }
+              : subCategory
+          )
+        }
+      })
+
+      const response = await fetch('/api/navigation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          navigationItems: updatedNavigationData
+        }),
+      })
+
+      if (!response.ok) {
+        let message = '保存排序失败'
+        try {
+          const errorData = await response.json()
+          message = errorData.error || errorData.message || message
+        } catch {
+          // ignore non-json error responses
+        }
+        throw new Error(message)
+      }
+
+      setNavigationData(updatedNavigationData)
+      setSites(extractSites(updatedNavigationData))
+      setSortOriginalItemIds(sortItems.map((item) => item.id))
+      setShowSortDialog(false)
+
+      toast({
+        title: "成功",
+        description: "站点排序已保存",
+      })
+    } catch (error) {
+      console.error('Save site order error:', error)
+      toast({
+        title: "错误",
+        description: error instanceof Error ? error.message : '保存排序失败',
+        variant: "destructive"
+      })
+    } finally {
+      setIsSortSaving(false)
+    }
+  }
+
   const filteredSites = sites.filter(site => {
     const matchesSearch = site.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       site.url.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -276,7 +463,12 @@ export default function SiteListPage() {
       (subCategoryFilter === 'none' && getSiteSubCategory(site.id) === '') ||
       getSiteSubCategory(site.id) === subCategoryFilter
 
-    return matchesSearch && matchesCategory && matchesSubCategory
+    const matchesStatus =
+      statusFilter === 'all' ||
+      (statusFilter === 'enabled' && site.enabled !== false) ||
+      (statusFilter === 'disabled' && site.enabled === false)
+
+    return matchesSearch && matchesCategory && matchesSubCategory && matchesStatus
   })
 
   // 键盘快捷键支持
@@ -446,7 +638,7 @@ export default function SiteListPage() {
         href: newSite.url,
         description: newSite.description,
         icon: newSite.icon,
-        enabled: true,
+        enabled: newSite.enabled,
         isPrivate: newSite.isPrivate
       }
 
@@ -494,6 +686,7 @@ export default function SiteListPage() {
         icon: '',
         categoryId: '',
         subCategoryId: '',
+        enabled: true,
         isPrivate: false
       })
       setShowAddDialog(false)
@@ -539,7 +732,7 @@ export default function SiteListPage() {
         href: editSite.url,
         description: editSite.description,
         icon: editSite.icon,
-        enabled: true,
+        enabled: editSite.enabled,
         isPrivate: editSite.isPrivate
       }
 
@@ -657,6 +850,7 @@ export default function SiteListPage() {
       icon: '',
       categoryId: '',
       subCategoryId: '',
+      enabled: true,
       isPrivate: false
       })
       setEditingSite(null)
@@ -683,6 +877,7 @@ export default function SiteListPage() {
     let categoryId = ''
     let subCategoryId = ''
     let icon = ''
+    let enabled = site.enabled ?? true
     let isPrivate = site.isPrivate ?? false
 
     for (const category of navigationData) {
@@ -691,6 +886,7 @@ export default function SiteListPage() {
       if (mainItem) {
         categoryId = category.id
         icon = mainItem.icon || ''
+        enabled = mainItem.enabled ?? true
         isPrivate = mainItem.isPrivate ?? false
         break
       }
@@ -702,6 +898,7 @@ export default function SiteListPage() {
             categoryId = category.id
             subCategoryId = subCategory.id
             icon = subItem.icon || ''
+            enabled = subItem.enabled ?? true
             isPrivate = subItem.isPrivate ?? false
             break
           }
@@ -717,6 +914,7 @@ export default function SiteListPage() {
       icon: icon,
       categoryId,
       subCategoryId,
+      enabled,
       isPrivate
     })
     setShowEditDialog(true)
@@ -832,6 +1030,29 @@ export default function SiteListPage() {
       </Tooltip>
     )
   }
+
+  const SiteStatusCell = ({ site }: { site: Site }) => (
+    <div className="flex flex-wrap gap-1">
+      {site.enabled === false ? (
+        <span className="inline-flex items-center rounded-full border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 dark:border-slate-700 dark:text-slate-300">
+          已禁用
+        </span>
+      ) : (
+        <span className="inline-flex items-center rounded-full border border-emerald-300 px-2 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-700 dark:text-emerald-300">
+          已启用
+        </span>
+      )}
+      {site.isPrivate ? (
+        <span className="inline-flex items-center rounded-full border border-amber-300 px-2 py-1 text-xs font-medium text-amber-700 dark:border-amber-700 dark:text-amber-300">
+          私密
+        </span>
+      ) : (
+        <span className="inline-flex items-center rounded-full border border-blue-300 px-2 py-1 text-xs font-medium text-blue-700 dark:border-blue-700 dark:text-blue-300">
+          公开
+        </span>
+      )}
+    </div>
+  )
 
   const isValidUrl = useCallback((string: string): boolean => {
     try {
@@ -976,6 +1197,12 @@ export default function SiteListPage() {
     }
   }
 
+  const selectedSortCategory = navigationData.find((category) => category.id === sortCategoryId)
+  const sortSubCategories = selectedSortCategory?.subCategories || []
+  const hasSortChanges =
+    sortItems.length !== sortOriginalItemIds.length ||
+    sortItems.some((item, index) => item.id !== sortOriginalItemIds[index])
+
   return (
     <TooltipProvider>
       <div className="space-y-4">
@@ -1058,6 +1285,19 @@ export default function SiteListPage() {
                   }
                 </SelectContent>
               </Select>
+              <Select
+                value={statusFilter}
+                onValueChange={(value: 'all' | 'enabled' | 'disabled') => setStatusFilter(value)}
+              >
+                <SelectTrigger className="w-full sm:w-[160px]">
+                  <SelectValue placeholder="按状态筛选" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部状态</SelectItem>
+                  <SelectItem value="enabled">已启用</SelectItem>
+                  <SelectItem value="disabled">已禁用</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:space-x-0 lg:justify-end">
@@ -1082,6 +1322,16 @@ export default function SiteListPage() {
               </Button>
             )}
 
+            <Button
+              variant="outline"
+              onClick={openSortDialog}
+              className="w-full whitespace-nowrap sm:w-auto"
+              disabled={navigationData.length === 0 || isLoading}
+            >
+              <Icons.list className="mr-2 h-4 w-4" />
+              站点排序
+            </Button>
+
             <Dialog open={showAddDialog} onOpenChange={(open) => {
               if (open) {
                 // 重置表单
@@ -1092,6 +1342,7 @@ export default function SiteListPage() {
                   icon: '',
                   categoryId: '',
                   subCategoryId: '',
+                  enabled: true,
                   isPrivate: false
                 })
                 lastFetchedAddUrl.current = ''
@@ -1158,7 +1409,7 @@ export default function SiteListPage() {
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="icon">站点图标</Label>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                       <div className="flex-1 relative">
                         <Input
                           id="icon"
@@ -1169,9 +1420,12 @@ export default function SiteListPage() {
                         />
                         {newSite.icon && (
                           <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                            <img
+                            <Image
                               src={newSite.icon}
                               alt="图标预览"
+                              width={16}
+                              height={16}
+                              unoptimized
                               className="w-4 h-4 object-contain"
                               onError={(e) => {
                                 const target = e.target as HTMLImageElement
@@ -1222,7 +1476,7 @@ export default function SiteListPage() {
                       </Button>
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      系统会自动获取网站图标，也可手动输入URL或上传本地图片
+                      输入站点链接后会自动获取并回填图标，也可手动输入 URL 或上传本地图片
                     </div>
                   </div>
                   <div className="grid gap-2">
@@ -1283,6 +1537,18 @@ export default function SiteListPage() {
                   </div>
                   <div className="flex items-center justify-between rounded-lg border p-3">
                     <div className="space-y-0.5">
+                      <Label htmlFor="is-enabled">是否启用</Label>
+                      <p className="text-xs text-muted-foreground">关闭后前台不会展示该站点</p>
+                    </div>
+                    <Switch
+                      id="is-enabled"
+                      checked={newSite.enabled}
+                      onCheckedChange={(checked) => setNewSite({ ...newSite, enabled: checked })}
+                      disabled={isAddingSubmitting}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg border p-3">
+                    <div className="space-y-0.5">
                       <Label htmlFor="is-private">是否私密</Label>
                       <p className="text-xs text-muted-foreground">开启后仅后台登录用户可见</p>
                     </div>
@@ -1308,6 +1574,196 @@ export default function SiteListPage() {
                       <Icons.loader2 className="mr-2 h-4 w-4 animate-spin" />
                     )}
                     {isAddingSubmitting ? "添加中..." : "添加站点"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={showSortDialog} onOpenChange={(open) => {
+              if (!open && !isSortSaving) {
+                setShowSortDialog(false)
+              }
+            }}>
+              <DialogContent className="sm:max-w-[720px]">
+                <DialogHeader>
+                  <DialogTitle>站点排序</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid gap-2">
+                      <Label htmlFor="sort-category">一级分类</Label>
+                      <Select
+                        value={sortCategoryId}
+                        onValueChange={handleSortCategoryChange}
+                        disabled={isSortSaving}
+                      >
+                        <SelectTrigger id="sort-category">
+                          <SelectValue placeholder="选择一级分类" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {navigationData.map((category) => (
+                            <SelectItem key={category.id} value={category.id}>
+                              {category.title}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="sort-subcategory">排序范围</Label>
+                      <Select
+                        value={sortSubCategoryId}
+                        onValueChange={handleSortSubCategoryChange}
+                        disabled={!sortCategoryId || isSortSaving}
+                      >
+                        <SelectTrigger id="sort-subcategory">
+                          <SelectValue placeholder="选择排序范围" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">一级分类直属站点</SelectItem>
+                          {sortSubCategories.map((subCategory) => (
+                            <SelectItem key={subCategory.id} value={subCategory.id}>
+                              {subCategory.title}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="rounded-md border">
+                    <div className="flex items-center justify-between gap-3 border-b px-3 py-2">
+                      <span className="min-w-0 truncate text-sm font-medium">
+                        当前范围：{selectedSortCategory?.title || '-'}
+                        {sortSubCategoryId !== 'none' && (
+                          <span>
+                            {' / '}
+                            {sortSubCategories.find((item) => item.id === sortSubCategoryId)?.title || '-'}
+                          </span>
+                        )}
+                      </span>
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        {sortItems.length} 个站点
+                      </span>
+                    </div>
+
+                    {sortItems.length > 0 ? (
+                      <div className="max-h-[420px] divide-y overflow-y-auto">
+                        {sortItems.map((item, index) => (
+                          <div key={item.id} className="flex items-center gap-3 px-3 py-2">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border bg-muted/30">
+                              {item.icon ? (
+                                <Image
+                                  src={item.icon}
+                                  alt=""
+                                  width={20}
+                                  height={20}
+                                  unoptimized
+                                  className="h-5 w-5 object-contain"
+                                  onError={(event) => {
+                                    const target = event.target as HTMLImageElement
+                                    target.style.display = 'none'
+                                  }}
+                                />
+                              ) : (
+                                <Icons.link className="h-4 w-4 text-muted-foreground" />
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-sm font-medium" title={item.title}>
+                                {item.title}
+                              </div>
+                              <div className="truncate text-xs text-muted-foreground" title={item.href}>
+                                {item.href}
+                              </div>
+                            </div>
+                            <div className="hidden shrink-0 sm:block">
+                              <SiteStatusCell
+                                site={{
+                                  id: item.id,
+                                  name: item.title,
+                                  url: item.href,
+                                  description: item.description,
+                                  enabled: item.enabled,
+                                  isPrivate: item.isPrivate,
+                                  createdAt: '',
+                                  updatedAt: ''
+                                }}
+                              />
+                            </div>
+                            <div className="flex shrink-0 items-center gap-1">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                title="置顶"
+                                disabled={index === 0 || isSortSaving}
+                                onClick={() => moveSortItem(index, 0)}
+                              >
+                                <Icons.chevronsUp className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                title="上移"
+                                disabled={index === 0 || isSortSaving}
+                                onClick={() => moveSortItem(index, index - 1)}
+                              >
+                                <Icons.arrowUp className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                title="下移"
+                                disabled={index === sortItems.length - 1 || isSortSaving}
+                                onClick={() => moveSortItem(index, index + 1)}
+                              >
+                                <Icons.arrowDown className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                title="置底"
+                                disabled={index === sortItems.length - 1 || isSortSaving}
+                                onClick={() => moveSortItem(index, sortItems.length - 1)}
+                              >
+                                <Icons.chevronsDown className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex min-h-[180px] items-center justify-center px-4 py-8 text-center text-sm text-muted-foreground">
+                        当前范围暂无站点
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowSortDialog(false)}
+                    disabled={isSortSaving}
+                  >
+                    取消
+                  </Button>
+                  <Button
+                    onClick={handleSaveSort}
+                    disabled={!hasSortChanges || isSortSaving}
+                  >
+                    {isSortSaving && (
+                      <Icons.loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    {isSortSaving ? "保存中..." : "保存排序"}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -1371,7 +1827,7 @@ export default function SiteListPage() {
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="edit-icon">站点图标</Label>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                       <div className="flex-1 relative">
                         <Input
                           id="edit-icon"
@@ -1382,9 +1838,12 @@ export default function SiteListPage() {
                         />
                         {editSite.icon && (
                           <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                            <img
+                            <Image
                               src={editSite.icon}
                               alt="图标预览"
+                              width={16}
+                              height={16}
+                              unoptimized
                               className="w-4 h-4 object-contain"
                               onError={(e) => {
                                 const target = e.target as HTMLImageElement
@@ -1435,7 +1894,7 @@ export default function SiteListPage() {
                       </Button>
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      系统会自动获取网站图标，也可手动输入URL或上传本地图片
+                      输入站点链接后会自动获取并回填图标，也可手动输入 URL 或上传本地图片
                     </div>
                   </div>
                   <div className="grid gap-2">
@@ -1491,6 +1950,18 @@ export default function SiteListPage() {
                       onChange={(e) => setEditSite({ ...editSite, description: e.target.value })}
                       placeholder="输入站点描述（可选）"
                       className="resize-none"
+                      disabled={isEditingSubmitting}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg border p-3">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="edit-is-enabled">是否启用</Label>
+                      <p className="text-xs text-muted-foreground">关闭后前台不会展示该站点</p>
+                    </div>
+                    <Switch
+                      id="edit-is-enabled"
+                      checked={editSite.enabled}
+                      onCheckedChange={(checked) => setEditSite({ ...editSite, enabled: checked })}
                       disabled={isEditingSubmitting}
                     />
                   </div>
@@ -1595,7 +2066,7 @@ export default function SiteListPage() {
                     <TableHead className="w-[10%]">一级分类</TableHead>
                     <TableHead className="w-[10%]">二级分类</TableHead>
                     <TableHead className="w-[16%]">描述</TableHead>
-                    <TableHead className="w-20">状态</TableHead>
+                    <TableHead className="w-28">状态</TableHead>
                     <TableHead className="w-24 text-right">操作</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1651,14 +2122,8 @@ export default function SiteListPage() {
                       <TableCell className="min-w-0">
                         <DescriptionCell description={site.description} />
                       </TableCell>
-                      <TableCell className="w-20">
-                        {site.isPrivate ? (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300">
-                            私密
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground text-xs">公开</span>
-                        )}
+                      <TableCell className="w-28">
+                        <SiteStatusCell site={site} />
                       </TableCell>
                       <TableCell className="w-24">
                         <div className="flex items-center justify-end gap-2">
@@ -1708,7 +2173,7 @@ export default function SiteListPage() {
                   <TableHead className="w-[10%]">一级分类</TableHead>
                   <TableHead className="w-[10%]">二级分类</TableHead>
                   <TableHead className="w-[16%]">描述</TableHead>
-                  <TableHead className="w-20">状态</TableHead>
+                  <TableHead className="w-28">状态</TableHead>
                   <TableHead className="w-24 text-right">操作</TableHead>
                 </TableRow>
               </TableHeader>
@@ -1764,14 +2229,8 @@ export default function SiteListPage() {
                     <TableCell className="min-w-0">
                       <DescriptionCell description={site.description} />
                     </TableCell>
-                    <TableCell className="w-20">
-                      {site.isPrivate ? (
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300">
-                          私密
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground text-xs">公开</span>
-                      )}
+                    <TableCell className="w-28">
+                      <SiteStatusCell site={site} />
                     </TableCell>
                     <TableCell className="w-24">
                       <div className="flex items-center justify-end gap-2">
@@ -1828,6 +2287,7 @@ export default function SiteListPage() {
                     setSearchQuery('')
                     setCategoryFilter('all')
                     setSubCategoryFilter('all')
+                    setStatusFilter('all')
                   }}
                 >
                   清除筛选

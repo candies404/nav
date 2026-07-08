@@ -13,7 +13,14 @@ export async function POST(request: Request) {
       return new Response('Unauthorized', { status: 401 })
     }
 
-    const { sourceIndex, destinationIndex } = await request.json()
+    const body = await request.json() as {
+      sourceIndex?: unknown
+      destinationIndex?: unknown
+      itemId?: unknown
+    }
+    const sourceIndex = Number(body.sourceIndex)
+    const destinationIndex = Number(body.destinationIndex)
+    const itemId = typeof body.itemId === 'string' ? body.itemId : null
 
     // 获取当前导航数据
     const data = await getFileContent('src/navsphere/content/navigation.json') as NavigationData
@@ -23,11 +30,29 @@ export async function POST(request: Request) {
       throw new Error('无效的导航数据')
     }
 
+    if (
+      !Number.isInteger(sourceIndex) ||
+      !Number.isInteger(destinationIndex) ||
+      sourceIndex < 0 ||
+      destinationIndex < 0 ||
+      sourceIndex >= data.navigationItems.length ||
+      destinationIndex >= data.navigationItems.length
+    ) {
+      return NextResponse.json({ error: '无效的排序位置' }, { status: 400 })
+    }
+
     // 创建新的导航项数组副本
     const updatedItems = [...data.navigationItems]
+    const actualSourceIndex = itemId
+      ? updatedItems.findIndex((item) => item.id === itemId)
+      : sourceIndex
+
+    if (actualSourceIndex === -1) {
+      return NextResponse.json({ error: '未找到要排序的导航项' }, { status: 404 })
+    }
 
     // 找到要移动的项目
-    const [movedItem] = updatedItems.splice(sourceIndex, 1)
+    const [movedItem] = updatedItems.splice(actualSourceIndex, 1)
 
     // 将项目插入到新位置
     updatedItems.splice(destinationIndex, 0, movedItem)

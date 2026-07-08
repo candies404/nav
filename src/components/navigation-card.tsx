@@ -1,7 +1,9 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import { Card, CardHeader, CardTitle, CardDescription } from '@/registry/new-york/ui/card'
 import type { NavigationSubItem } from '@/types/navigation'
 import type { SiteConfig } from '@/types/site'
+import { getNavigationItemElementId } from '@/lib/navigation-anchor'
 
 interface NavigationCardProps {
   item: NavigationSubItem
@@ -12,7 +14,10 @@ export function NavigationCard({ item, siteConfig }: NavigationCardProps) {
   const linkTarget = siteConfig?.navigation?.linkTarget || '_blank'
 
   return (
-    <Card className="h-full overflow-hidden transition-all duration-300 ease-in-out transform hover:-translate-y-1 hover:shadow-lg">
+    <Card
+      id={getNavigationItemElementId(item.id)}
+      className="h-full scroll-m-24 overflow-hidden transition-all duration-300 ease-in-out transform hover:-translate-y-1 hover:shadow-lg"
+    >
       <Link
         href={item.href}
         target={linkTarget}
@@ -24,13 +29,12 @@ export function NavigationCard({ item, siteConfig }: NavigationCardProps) {
           <div className="flex min-w-0 items-start gap-2 sm:gap-3">
             {item.icon && (
               <div className="h-8 w-8 flex-shrink-0 sm:h-10 sm:w-10">
-                <img
+                <Image
                   src={item.icon}
                   alt={`${item.title} icon`}
                   width={40}
                   height={40}
-                  loading="lazy"
-                  decoding="async"
+                  unoptimized
                   className="w-full h-full object-contain"
                 />
               </div>

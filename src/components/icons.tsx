@@ -1,5 +1,7 @@
 import {
   ArrowLeft,
+  ArrowDown,
+  ArrowUp,
   BookOpen,
   Bookmark,
   Briefcase,
@@ -79,6 +81,8 @@ export type Icon = LucideIcon
 
 export const Icons = {
   arrowLeft: ArrowLeft,
+  arrowDown: ArrowDown,
+  arrowUp: ArrowUp,
   bookOpen: BookOpen,
   bookmark: Bookmark,
   briefcase: Briefcase,

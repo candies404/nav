@@ -66,6 +66,7 @@ export function filterNavigationData(navigationData: NavigationData, includePriv
                         ...sub,
                         items: sub.items?.filter((item) => shouldShowItem(item, includePrivate))
                     }))
+                    .filter((sub) => (sub.items?.length || 0) > 0)
                 : undefined
 
             return {
@@ -73,7 +74,11 @@ export function filterNavigationData(navigationData: NavigationData, includePriv
                 items: category.items?.filter((item) => shouldShowItem(item, includePrivate)),
                 subCategories: filteredSubCategories
             }
-        }) as NavigationItem[]
+        })
+        .filter((category) =>
+            (category.items?.length || 0) > 0 ||
+            (category.subCategories?.length || 0) > 0
+        ) as NavigationItem[]
 
     return {
         navigationItems: filteredItems

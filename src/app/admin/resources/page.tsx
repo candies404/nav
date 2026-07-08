@@ -2,6 +2,7 @@
 
 export const runtime = 'edge'
 
+import Image from "next/image"
 import { useEffect, useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
@@ -531,11 +532,13 @@ export default function ResourceManagement() {
                     </Button>
                   </div>
 
-                  <img
+                  <Image
                     src={resource.items[0].url}
                     alt={`Resource ${index + 1}`}
-                    className="w-full h-full object-cover rounded-t-lg"
-                    loading="lazy"
+                    fill
+                    unoptimized
+                    sizes="(min-width: 1024px) 160px, (min-width: 640px) 25vw, 50vw"
+                    className="rounded-t-lg object-cover"
                   />
                   {/* 图片遮罩层和预览按钮 - 进一步缩小 */}
                   <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
@@ -645,11 +648,16 @@ export default function ResourceManagement() {
                         >
                           {selectedImage ? (
                             <div className="relative w-full">
-                              <img
-                                src={selectedImage}
-                                alt="Preview"
-                                className="w-full h-48 object-cover rounded-lg"
-                              />
+                              <div className="relative h-48 w-full">
+                                <Image
+                                  src={selectedImage}
+                                  alt="Preview"
+                                  fill
+                                  unoptimized
+                                  sizes="384px"
+                                  className="rounded-lg object-cover"
+                                />
+                              </div>
                               <Button
                                 type="button"
                                 variant="destructive"
@@ -781,11 +789,14 @@ export default function ResourceManagement() {
                     {filteredResources
                       .filter(r => selectedResources.has(r.id))
                       .map((resource, index) => (
-                        <div key={index} className="relative group">
-                          <img
+                        <div key={index} className="relative aspect-square group">
+                          <Image
                             src={resource.items[0].url}
                             alt="Resource"
-                            className="w-full aspect-square object-cover rounded border"
+                            fill
+                            unoptimized
+                            sizes="96px"
+                            className="rounded border object-cover"
                           />
                           <div className="absolute inset-0 bg-red-500/20 rounded"></div>
                           <div className="absolute bottom-1 left-1 right-1">
@@ -804,9 +815,12 @@ export default function ResourceManagement() {
                       .slice(0, 12)
                       .map((resource, index) => (
                         <div key={index} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
-                          <img
+                          <Image
                             src={resource.items[0].url}
                             alt="Resource"
+                            width={48}
+                            height={48}
+                            unoptimized
                             className="w-12 h-12 object-cover rounded border flex-shrink-0"
                           />
                           <div className="flex-1 min-w-0">

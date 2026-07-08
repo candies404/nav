@@ -47,6 +47,52 @@ type NavigationHistoryDetail = NavigationHistorySummary & {
   }
 }
 
+type NavigationDataStats = {
+  categories: number
+  items: number
+  size: number
+}
+
+function getNavigationDataStats(jsonString: string): NavigationDataStats {
+  const parsed = JSON.parse(jsonString) as { navigationItems?: NavigationItem[] }
+  const categories = parsed.navigationItems?.length || 0
+  let items = 0
+
+  parsed.navigationItems?.forEach((category) => {
+    items += category.items?.length || 0
+    category.subCategories?.forEach((sub: NavigationCategory) => {
+      items += sub.items?.length || 0
+    })
+  })
+
+  return {
+    categories,
+    items,
+    size: new Blob([jsonString]).size,
+  }
+}
+
+function formatStatsSummary(previous: NavigationDataStats | null, current: NavigationDataStats) {
+  if (!previous) {
+    return [
+      `当前分类数：${current.categories}`,
+      `当前站点数：${current.items}`,
+      `当前大小：${(current.size / 1024).toFixed(2)} KB`,
+    ].join('\n')
+  }
+
+  const formatDelta = (value: number) => {
+    if (value > 0) return `+${value}`
+    return String(value)
+  }
+
+  return [
+    `分类数：${previous.categories} -> ${current.categories} (${formatDelta(current.categories - previous.categories)})`,
+    `站点数：${previous.items} -> ${current.items} (${formatDelta(current.items - previous.items)})`,
+    `大小：${(previous.size / 1024).toFixed(2)} KB -> ${(current.size / 1024).toFixed(2)} KB (${formatDelta(Number(((current.size - previous.size) / 1024).toFixed(2)))} KB)`,
+  ].join('\n')
+}
+
 export default function DataManagementPage() {
   const [navigationData, setNavigationData] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -56,6 +102,7 @@ export default function DataManagementPage() {
   const [isJsonValid, setIsJsonValid] = useState(true)
   const [jsonError, setJsonError] = useState('')
   const [dataStats, setDataStats] = useState({ categories: 0, items: 0, size: 0 })
+  const [savedDataStats, setSavedDataStats] = useState<NavigationDataStats | null>(null)
 
   const [defaultFileStatus, setDefaultFileStatus] = useState({ exists: false, valid: false, itemCount: 0, checked: false })
   const [historyVersions, setHistoryVersions] = useState<NavigationHistorySummary[]>([])
@@ -123,20 +170,8 @@ export default function DataManagementPage() {
       setIsJsonValid(true)
       setJsonError('')
 
-      // 计算统计信息
       if (parsed.navigationItems) {
-        const categories = parsed.navigationItems.length
-        let items = 0
-        parsed.navigationItems.forEach((category: NavigationItem) => {
-          if (category.items) items += category.items.length
-          if (category.subCategories) {
-            category.subCategories.forEach((sub: NavigationCategory) => {
-              if (sub.items) items += sub.items.length
-            })
-          }
-        })
-        const size = new Blob([jsonString]).size
-        setDataStats({ categories, items, size })
+        setDataStats(getNavigationDataStats(jsonString))
       }
       return true
     } catch (error) {
@@ -156,6 +191,7 @@ export default function DataManagementPage() {
         const jsonString = JSON.stringify(data, null, 2)
         setNavigationData(jsonString)
         validateJson(jsonString)
+        setSavedDataStats(getNavigationDataStats(jsonString))
       } else {
         throw new Error('加载数据失败')
       }
@@ -195,6 +231,8 @@ export default function DataManagementPage() {
   }
 
   const restoreHistoryVersion = async (versionId: string) => {
+    if (!window.confirm('确认恢复到这个历史版本？当前数据会先自动保存为历史版本，然后被选中版本替换。')) return
+
     setIsRestoringHistory(true)
     try {
       const response = await fetch('/api/navigation/history/restore', {
@@ -213,6 +251,7 @@ export default function DataManagementPage() {
       const jsonString = JSON.stringify(result.data, null, 2)
       setNavigationData(jsonString)
       validateJson(jsonString)
+      setSavedDataStats(getNavigationDataStats(jsonString))
       setHistoryPreview(null)
       setIsRestoreDialogOpen(false)
       await loadHistoryVersions()
@@ -271,6 +310,8 @@ export default function DataManagementPage() {
 
   // 恢复初始化数据
   const restoreDefaultData = async () => {
+    if (!window.confirm('确认恢复初始化数据？当前导航数据会被默认数据替换。')) return
+
     // 检查默认文件是否存在
     if (!defaultFileStatus.exists) {
       toast({
@@ -301,6 +342,7 @@ export default function DataManagementPage() {
         const jsonString = JSON.stringify(data, null, 2)
         setNavigationData(jsonString)
         validateJson(jsonString)
+        setSavedDataStats(getNavigationDataStats(jsonString))
         setIsRestoreDialogOpen(false)
         await loadHistoryVersions()
         toast({
@@ -333,6 +375,11 @@ export default function DataManagementPage() {
       return
     }
 
+    const currentStats = getNavigationDataStats(navigationData)
+    if (!window.confirm(`确认保存导航 JSON？\n\n${formatStatsSummary(savedDataStats, currentStats)}`)) {
+      return
+    }
+
     setIsSaving(true)
     try {
       const response = await fetch('/api/navigation', {
@@ -354,6 +401,7 @@ export default function DataManagementPage() {
         }
 
         await loadHistoryVersions()
+        setSavedDataStats(currentStats)
         toast({
           title: "成功",
           description: "数据保存成功",
@@ -371,7 +419,7 @@ export default function DataManagementPage() {
     } finally {
       setIsSaving(false)
     }
-  }, [loadHistoryVersions, navigationData, toast, validateJson])
+  }, [loadHistoryVersions, navigationData, savedDataStats, toast, validateJson])
 
   const cacheFavicons = async () => {
     setIsCachingIcons(true)
@@ -479,6 +527,11 @@ export default function DataManagementPage() {
         description: "文件大小不能超过5MB",
         variant: "destructive",
       })
+      return
+    }
+
+    if (navigationData && !window.confirm('上传文件会替换当前编辑器中的 JSON 内容，确认继续？')) {
+      event.target.value = ''
       return
     }
 
@@ -608,14 +661,24 @@ export default function DataManagementPage() {
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">数据管理</h1>
           </div>
           <p className="text-muted-foreground">
-            管理导航数据，支持历史版本恢复、在线编辑和数据下载
+            直接编辑导航 JSON、恢复历史版本和导入导出数据
           </p>
         </div>
         <div className="flex items-center gap-2">
         </div>
       </div>
 
-
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div className="space-y-1">
+            <div className="font-medium">这是高级维护入口</div>
+            <p>
+              日常新增、编辑和移动站点请优先使用“站点管理”和“分类管理”。这里保存 JSON 或恢复版本会直接影响前台导航数据。
+            </p>
+          </div>
+        </div>
+      </div>
 
       {/* 操作面板 */}
       <Card className="flex items-center">

@@ -90,55 +90,8 @@ export default function NavigationPage() {
     }
   }
 
-  const handleMoveToTop = async (id: string) => {
-    try {
-      const response = await fetch(`/api/navigation/${id}/move-to-top`, {
-        method: 'POST'
-      })
-
-      if (!response.ok) throw new Error('Failed to move')
-
-      mutate()
-      toast({
-        title: "成功",
-        description: "移动成功"
-      })
-    } catch {
-      toast({
-        title: "错误",
-        description: "移动失败",
-        variant: "destructive"
-      })
-    }
-  }
-
-  const handleMoveToBottom = async (id: string) => {
-    try {
-      const response = await fetch(`/api/navigation/${id}/move-to-bottom`, {
-        method: 'POST'
-      })
-
-      if (!response.ok) throw new Error('Failed to move')
-
-      mutate()
-      toast({
-        title: "成功",
-        description: "移动成功"
-      })
-    } catch {
-      toast({
-        title: "错误",
-        description: "移动失败",
-        variant: "destructive"
-      })
-    }
-  }
-
-  const handleDragEnd = async (result: DropResult) => {
-    if (!result.destination) return
-
-    const sourceIndex = result.source.index
-    const destinationIndex = result.destination.index
+  const moveNavigationItem = async (sourceIndex: number, destinationIndex: number, itemId: string) => {
+    if (isFiltered) return
 
     if (sourceIndex === destinationIndex) return
 
@@ -164,7 +117,7 @@ export default function NavigationPage() {
         body: JSON.stringify({
           sourceIndex,
           destinationIndex,
-          itemId: result.draggableId
+          itemId
         })
       })
 
@@ -194,11 +147,41 @@ export default function NavigationPage() {
     }
   }
 
+  const handleDragEnd = async (result: DropResult) => {
+    if (!result.destination) return
+
+    await moveNavigationItem(
+      result.source.index,
+      result.destination.index,
+      result.draggableId
+    )
+  }
+
+  const moveToTop = async (id: string) => {
+    const index = items.findIndex((item) => item.id === id)
+    if (index > 0) {
+      await moveNavigationItem(index, 0, id)
+    }
+  }
+
+  const moveToBottom = async (id: string) => {
+    const index = items.findIndex((item) => item.id === id)
+    if (index >= 0 && index < items.length - 1) {
+      await moveNavigationItem(index, items.length - 1, id)
+    }
+  }
+
   const filteredItems = items
     .filter(item =>
       item.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      (showEnabled === null || item.enabled === showEnabled)
+      (
+        showEnabled === null ||
+        (showEnabled === true && item.enabled !== false) ||
+        (showEnabled === false && item.enabled === false)
+      )
     )
+
+  const isFiltered = searchQuery.trim().length > 0 || showEnabled !== null
 
   return (
     <div className="flex h-full flex-1 flex-col space-y-4 sm:space-y-6 md:flex">
@@ -282,31 +265,43 @@ export default function NavigationPage() {
             </div>
           </div>
         ) : (
+          <>
+          {isFiltered && (
+            <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+              当前处于筛选状态，已暂时停用拖拽排序和置顶置底，以避免影响未显示的分类。
+            </div>
+          )}
           <DragDropContext onDragEnd={handleDragEnd}>
-            <Droppable droppableId="navigation-list">
+            <Droppable droppableId="navigation-list" isDropDisabled={isFiltered}>
               {(provided) => (
                 <div
                   {...provided.droppableProps}
                   ref={provided.innerRef}
                   className="space-y-4"
                 >
-                  {filteredItems.map((item, index) => (
-                    <NavigationCard
-                      key={item.id}
-                      item={item}
-                      index={index}
-                      onUpdate={mutate}
-                      showMoveToTop={index > 0}
-                      showMoveToBottom={index < filteredItems.length - 1}
-                      onMoveToTop={() => handleMoveToTop(item.id)}
-                      onMoveToBottom={() => handleMoveToBottom(item.id)}
-                    />
-                  ))}
+                  {filteredItems.map((item, index) => {
+                    const actualIndex = items.findIndex((currentItem) => currentItem.id === item.id)
+
+                    return (
+                      <NavigationCard
+                        key={item.id}
+                        item={item}
+                        index={index}
+                        onUpdate={mutate}
+                        isDragDisabled={isFiltered}
+                        showMoveToTop={!isFiltered && actualIndex > 0}
+                        showMoveToBottom={!isFiltered && actualIndex >= 0 && actualIndex < items.length - 1}
+                        onMoveToTop={() => moveToTop(item.id)}
+                        onMoveToBottom={() => moveToBottom(item.id)}
+                      />
+                    )
+                  })}
                   {provided.placeholder}
                 </div>
               )}
             </Droppable>
           </DragDropContext>
+          </>
         )}
       </div>
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

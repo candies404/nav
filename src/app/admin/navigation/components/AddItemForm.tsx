@@ -1,5 +1,6 @@
 'use client'
 
+import Image from "next/image"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -214,9 +215,12 @@ export function AddItemForm({ onSubmit, onCancel, defaultValues }: AddItemFormPr
                     />
                     {field.value && (
                       <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                        <img
+                        <Image
                           src={field.value}
                           alt="图标预览"
+                          width={16}
+                          height={16}
+                          unoptimized
                           className="w-4 h-4 object-contain"
                           onError={(e) => {
                             const target = e.target as HTMLImageElement

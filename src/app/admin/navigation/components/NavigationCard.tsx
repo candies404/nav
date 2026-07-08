@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from "@/registry/new-york/ui/button"
 import { 
@@ -17,13 +17,14 @@ import { Draggable } from "@hello-pangea/dnd"
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/registry/new-york/ui/tooltip"
 import { NavigationItem } from '@/types/navigation'
 import { navigationIcons, type IconType } from '@/lib/icons'
-import { 
+import {
+  ChevronsDown,
+  ChevronsUp,
   FolderOpen, 
+  GripVertical,
   List, 
   Pencil, 
-  Trash, 
-  ChevronsUp, 
-  ChevronsDown 
+  Trash
 } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { Badge } from "@/registry/new-york/ui/badge"
@@ -32,20 +33,22 @@ interface NavigationCardProps {
   item: NavigationItem
   index: number
   onUpdate: () => void
-  onMoveToTop?: () => void
-  onMoveToBottom?: () => void
+  isDragDisabled?: boolean
   showMoveToTop?: boolean
   showMoveToBottom?: boolean
+  onMoveToTop?: () => void
+  onMoveToBottom?: () => void
 }
 
-export function NavigationCard({ 
+export const NavigationCard = memo(function NavigationCard({
   item, 
   index,
   onUpdate,
+  isDragDisabled = false,
+  showMoveToTop = false,
+  showMoveToBottom = false,
   onMoveToTop,
-  onMoveToBottom,
-  showMoveToTop,
-  showMoveToBottom
+  onMoveToBottom
 }: NavigationCardProps) {
   const router = useRouter()
   const { toast } = useToast()
@@ -114,133 +117,153 @@ export function NavigationCard({
   }
 
   return (
-    <Draggable draggableId={item.id} index={index}>
+    <Draggable draggableId={item.id} index={index} isDragDisabled={isDragDisabled}>
       {(provided, snapshot) => (
         <div
           ref={provided.innerRef}
           {...provided.draggableProps}
-          {...provided.dragHandleProps}
-          className={`flex items-center justify-between p-4 rounded-lg border bg-card text-card-foreground shadow-sm hover:border-primary/50 transition-colors ${
-            snapshot.isDragging ? 'bg-gray-50' : ''
-          }`}
+          style={provided.draggableProps.style}
+          className={cn(
+            "group relative",
+            snapshot.isDragging && "z-50"
+          )}
         >
-          <div className="flex items-center space-x-4">
-            <Icon className="h-6 w-6 text-muted-foreground" />
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-medium">{item.title}</h3>
-                <Badge 
-                  variant={(item.enabled ?? true) ? "default" : "secondary"}
-                  className={cn(
-                    "text-xs",
-                    (item.enabled ?? true)
-                      ? "bg-green-100 text-green-800 hover:bg-green-100" 
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-100"
-                  )}
-                >
-                  {(item.enabled ?? true) ? "已启用" : "已禁用"}
-                </Badge>
+          <div
+            className={cn(
+              "flex min-h-[72px] items-center justify-between rounded-lg border bg-card px-3 py-3 text-card-foreground",
+              snapshot.isDragging
+                ? "border-primary/40 shadow-md ring-1 ring-primary/20 will-change-transform"
+                : "shadow-sm hover:border-primary/50"
+            )}
+          >
+            <div className="flex min-w-0 items-center gap-3">
+              <div
+                className={cn(
+                  "inline-flex h-8 w-8 shrink-0 cursor-grab items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground active:cursor-grabbing",
+                  isDragDisabled && "cursor-not-allowed opacity-50"
+                )}
+                title="拖动排序"
+                aria-label={`拖动 ${item.title}`}
+                aria-disabled={isDragDisabled}
+                {...(provided.dragHandleProps || {})}
+              >
+                <GripVertical className="h-4 w-4" />
               </div>
-              <p className="text-xs text-muted-foreground">{item.description}</p>
+              <Icon className="h-6 w-6 shrink-0 text-muted-foreground" />
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-center gap-2">
+                  <h3 className="truncate text-sm font-medium" title={item.title}>{item.title}</h3>
+                  <Badge
+                    variant={(item.enabled ?? true) ? "default" : "secondary"}
+                    className={cn(
+                      "shrink-0 text-xs",
+                      (item.enabled ?? true)
+                        ? "bg-green-100 text-green-800 hover:bg-green-100"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-100"
+                    )}
+                  >
+                    {(item.enabled ?? true) ? "已启用" : "已禁用"}
+                  </Badge>
+                </div>
+                {item.description && (
+                  <p className="mt-1 truncate text-xs text-muted-foreground" title={item.description}>
+                    {item.description}
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => router.push(`/admin/navigation/${item.id}/categories`)}
-                    className="h-8 w-8"
-                  >
-                    <FolderOpen className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>分类管理</p>
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => router.push(`/admin/navigation/${item.id}/items`)}
-                    className="h-8 w-8"
-                  >
-                    <List className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>站点管理</p>
-                </TooltipContent>
-              </Tooltip>
-              {showMoveToTop && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
+            <div className="flex shrink-0 items-center gap-2">
+              {!snapshot.isDragging && (
+                <div className="mr-2 hidden items-center gap-1 group-hover:flex">
+                  {showMoveToTop && (
                     <Button
+                      type="button"
                       variant="ghost"
                       size="icon"
+                      className="h-7 w-7"
                       onClick={onMoveToTop}
-                      className="h-8 w-8"
+                      title="置顶"
                     >
                       <ChevronsUp className="h-4 w-4" />
                     </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>置顶</p>
-                  </TooltipContent>
-                </Tooltip>
+                  )}
+                  {showMoveToBottom && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={onMoveToBottom}
+                      title="置底"
+                    >
+                      <ChevronsDown className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               )}
-              {showMoveToBottom && (
+              <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={onMoveToBottom}
+                      onClick={() => router.push(`/admin/navigation/${item.id}/categories`)}
                       className="h-8 w-8"
                     >
-                      <ChevronsDown className="h-4 w-4" />
+                      <FolderOpen className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>置底</p>
+                    <p>分类管理</p>
                   </TooltipContent>
                 </Tooltip>
-              )}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setIsEditDialogOpen(true)}
-                    className="h-8 w-8"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>编辑</p>
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setIsDeleteDialogOpen(true)}
-                    className="h-8 w-8"
-                  >
-                    <Trash className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>删除</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => router.push(`/admin/sitelist?categoryId=${encodeURIComponent(item.id)}`)}
+                      className="h-8 w-8"
+                    >
+                      <List className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>管理站点</p>
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setIsEditDialogOpen(true)}
+                      className="h-8 w-8"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>编辑</p>
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setIsDeleteDialogOpen(true)}
+                      className="h-8 w-8"
+                    >
+                      <Trash className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>删除</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
           </div>
 
           <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
@@ -283,4 +306,4 @@ export function NavigationCard({
       )}
     </Draggable>
   )
-}
+})
