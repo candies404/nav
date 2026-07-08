@@ -82,6 +82,14 @@ interface Site {
   updatedAt: string
 }
 
+type SiteLocation = {
+  categoryIndex: number
+  subCategoryIndex?: number
+  itemIndex: number
+}
+
+type BatchOperation = 'description' | 'icon' | 'enable' | 'disable' | 'private' | 'public' | 'move' | null
+
 export default function SiteListPage() {
   const { toast } = useToast()
   const [sites, setSites] = useState<Site[]>([])
@@ -110,6 +118,10 @@ export default function SiteListPage() {
   const [isUploadingAddIcon, setIsUploadingAddIcon] = useState(false)
   const [isUploadingEditIcon, setIsUploadingEditIcon] = useState(false)
   const [isBatchDeleting, setIsBatchDeleting] = useState(false)
+  const [batchOperation, setBatchOperation] = useState<BatchOperation>(null)
+  const [showBatchMoveDialog, setShowBatchMoveDialog] = useState(false)
+  const [batchMoveCategoryId, setBatchMoveCategoryId] = useState('')
+  const [batchMoveSubCategoryId, setBatchMoveSubCategoryId] = useState('none')
   const [isFetchingAddMetadata, setIsFetchingAddMetadata] = useState(false)
   const [isFetchingEditMetadata, setIsFetchingEditMetadata] = useState(false)
   const isInitialLoadingRef = useRef(true)
@@ -227,6 +239,72 @@ export default function SiteListPage() {
   useEffect(() => {
     fetchSites()
   }, [fetchSites])
+
+  const cloneNavigationData = useCallback((data: Category[]): Category[] => {
+    return data.map((category) => ({
+      ...category,
+      items: (category.items || []).map((item) => ({ ...item })),
+      subCategories: category.subCategories?.map((subCategory) => ({
+        ...subCategory,
+        items: (subCategory.items || []).map((item) => ({ ...item })),
+      })),
+    }))
+  }, [])
+
+  const findSiteLocation = useCallback((data: Category[], siteId: string): SiteLocation | null => {
+    for (let categoryIndex = 0; categoryIndex < data.length; categoryIndex++) {
+      const category = data[categoryIndex]
+
+      const itemIndex = category.items?.findIndex((item) => item.id === siteId) ?? -1
+      if (itemIndex !== -1) {
+        return { categoryIndex, itemIndex }
+      }
+
+      for (let subCategoryIndex = 0; subCategoryIndex < (category.subCategories?.length || 0); subCategoryIndex++) {
+        const subCategory = category.subCategories![subCategoryIndex]
+        const subItemIndex = subCategory.items?.findIndex((item) => item.id === siteId) ?? -1
+        if (subItemIndex !== -1) {
+          return { categoryIndex, subCategoryIndex, itemIndex: subItemIndex }
+        }
+      }
+    }
+
+    return null
+  }, [])
+
+  const getItemAtLocation = (data: Category[], location: SiteLocation) => {
+    if (location.subCategoryIndex !== undefined) {
+      return data[location.categoryIndex].subCategories![location.subCategoryIndex].items[location.itemIndex]
+    }
+
+    return data[location.categoryIndex].items[location.itemIndex]
+  }
+
+  const saveNavigationItems = useCallback(async (updatedNavigationData: Category[], failureMessage: string) => {
+    const response = await fetch('/api/navigation', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        navigationItems: updatedNavigationData
+      }),
+    })
+
+    if (!response.ok) {
+      let message = failureMessage
+      try {
+        const errorData = await response.json()
+        message = errorData.error || errorData.message || failureMessage
+      } catch {
+        // ignore non-json error responses
+      }
+      throw new Error(message)
+    }
+
+    setNavigationData(updatedNavigationData)
+    setSites(extractSites(updatedNavigationData))
+  }, [extractSites])
 
   // 获取站点所属的分类
   const getSiteCategory = (siteId: string): string => {
@@ -533,71 +611,33 @@ export default function SiteListPage() {
 
     setIsBatchDeleting(true)
     try {
-      // Create a copy of navigation data
-      const updatedNavigationData = [...navigationData]
+      const updatedNavigationData = cloneNavigationData(navigationData)
 
       // Remove all selected sites from the navigation structure
       for (const siteId of selectedSites) {
-        let found = false
+        const location = findSiteLocation(updatedNavigationData, siteId)
+        if (!location) continue
 
-        for (let categoryIndex = 0; categoryIndex < updatedNavigationData.length; categoryIndex++) {
-          const category = updatedNavigationData[categoryIndex]
-
-          // Check main category items
-          if (category.items) {
-            const itemIndex = category.items.findIndex(item => item.id === siteId)
-            if (itemIndex !== -1) {
-              updatedNavigationData[categoryIndex].items!.splice(itemIndex, 1)
-              found = true
-              break
-            }
-          }
-
-          // Check subcategory items
-          if (category.subCategories && !found) {
-            for (let subIndex = 0; subIndex < category.subCategories.length; subIndex++) {
-              const subCategory = category.subCategories[subIndex]
-              if (subCategory.items) {
-                const itemIndex = subCategory.items.findIndex(item => item.id === siteId)
-                if (itemIndex !== -1) {
-                  updatedNavigationData[categoryIndex].subCategories![subIndex].items.splice(itemIndex, 1)
-                  found = true
-                  break
-                }
-              }
-            }
-          }
-
-          if (found) break
+        if (location.subCategoryIndex !== undefined) {
+          updatedNavigationData[location.categoryIndex].subCategories![location.subCategoryIndex].items.splice(location.itemIndex, 1)
+        } else {
+          updatedNavigationData[location.categoryIndex].items.splice(location.itemIndex, 1)
         }
       }
 
-      // Save to API
-      const response = await fetch('/api/navigation', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          navigationItems: updatedNavigationData
-        }),
-      })
-
-      if (!response.ok) throw new Error('Failed to save')
+      await saveNavigationItems(updatedNavigationData, '批量删除失败')
 
       toast({
         title: "成功",
         description: `已删除选中的 ${selectedSites.length} 个站点`,
       })
 
-      // Refresh the sites list
-      fetchSites()
       setSelectedSites([])
     } catch (error) {
       console.error('Batch delete error:', error)
       toast({
         title: "错误",
-        description: "批量删除失败",
+        description: error instanceof Error ? error.message : "批量删除失败",
         variant: "destructive"
       })
     } finally {
@@ -1197,8 +1237,257 @@ export default function SiteListPage() {
     }
   }
 
+  const getBatchOperationLabel = (operation: Exclude<BatchOperation, null>) => {
+    const labels: Record<Exclude<BatchOperation, null>, string> = {
+      description: '补全描述',
+      icon: '刷新图标',
+      enable: '启用',
+      disable: '禁用',
+      private: '设为私有',
+      public: '设为公开',
+      move: '移动分类',
+    }
+
+    return labels[operation]
+  }
+
+  const handleBatchMetadataUpdate = async (field: 'description' | 'icon') => {
+    if (selectedSites.length === 0 || batchOperation) return
+
+    setBatchOperation(field)
+    try {
+      const updatedNavigationData = cloneNavigationData(navigationData)
+      let processed = 0
+      let updated = 0
+      let failed = 0
+
+      for (const siteId of selectedSites) {
+        const location = findSiteLocation(updatedNavigationData, siteId)
+        if (!location) {
+          failed += 1
+          continue
+        }
+
+        const item = getItemAtLocation(updatedNavigationData, location)
+
+        try {
+          if (!isValidUrl(item.href)) {
+            failed += 1
+            continue
+          }
+
+          if (field === 'description' && item.description?.trim()) {
+            processed += 1
+            continue
+          }
+
+          const response = await fetch('/api/website-metadata', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ url: item.href }),
+          })
+
+          if (!response.ok) {
+            throw new Error('获取网站信息失败')
+          }
+
+          const metadata = await response.json() as { description?: string; icon?: string }
+
+          if (field === 'description') {
+            const description = metadata.description?.trim()
+            if (description && item.description !== description) {
+              item.description = description
+              updated += 1
+            }
+          } else {
+            const icon = metadata.icon?.trim()
+            if (icon && item.icon !== icon) {
+              item.icon = icon
+              updated += 1
+            }
+          }
+
+          processed += 1
+        } catch (error) {
+          failed += 1
+          console.warn('Batch metadata update failed:', {
+            site: item.title,
+            href: item.href,
+            error,
+          })
+        }
+      }
+
+      if (updated > 0) {
+        await saveNavigationItems(
+          updatedNavigationData,
+          field === 'description' ? '批量补全描述失败' : '批量刷新图标失败'
+        )
+      }
+
+      toast({
+        title: updated > 0 ? "成功" : "完成",
+        description: field === 'description'
+          ? `已检查 ${processed} 个站点，补全描述 ${updated} 个${failed > 0 ? `，失败 ${failed} 个` : ''}`
+          : `已检查 ${processed} 个站点，刷新图标 ${updated} 个${failed > 0 ? `，失败 ${failed} 个` : ''}`,
+        variant: failed > 0 && updated === 0 ? "destructive" : "default",
+      })
+    } catch (error) {
+      console.error('Batch metadata update error:', error)
+      toast({
+        title: "错误",
+        description: error instanceof Error ? error.message : getBatchOperationLabel(field),
+        variant: "destructive"
+      })
+    } finally {
+      setBatchOperation(null)
+    }
+  }
+
+  const handleBatchBooleanUpdate = async (
+    operation: 'enable' | 'disable' | 'private' | 'public',
+    patch: Pick<NavigationSubItem, 'enabled'> | Pick<NavigationSubItem, 'isPrivate'>
+  ) => {
+    if (selectedSites.length === 0 || batchOperation) return
+
+    setBatchOperation(operation)
+    try {
+      const updatedNavigationData = cloneNavigationData(navigationData)
+      let updated = 0
+
+      for (const siteId of selectedSites) {
+        const location = findSiteLocation(updatedNavigationData, siteId)
+        if (!location) continue
+
+        const item = getItemAtLocation(updatedNavigationData, location)
+        const nextItem = { ...item, ...patch }
+
+        if (
+          nextItem.enabled !== item.enabled ||
+          nextItem.isPrivate !== item.isPrivate
+        ) {
+          if (location.subCategoryIndex !== undefined) {
+            updatedNavigationData[location.categoryIndex].subCategories![location.subCategoryIndex].items[location.itemIndex] = nextItem
+          } else {
+            updatedNavigationData[location.categoryIndex].items[location.itemIndex] = nextItem
+          }
+          updated += 1
+        }
+      }
+
+      if (updated > 0) {
+        await saveNavigationItems(updatedNavigationData, `批量${getBatchOperationLabel(operation)}失败`)
+      }
+
+      toast({
+        title: updated > 0 ? "成功" : "完成",
+        description: `已${getBatchOperationLabel(operation)} ${updated} 个站点`,
+      })
+    } catch (error) {
+      console.error('Batch boolean update error:', error)
+      toast({
+        title: "错误",
+        description: error instanceof Error ? error.message : `批量${getBatchOperationLabel(operation)}失败`,
+        variant: "destructive"
+      })
+    } finally {
+      setBatchOperation(null)
+    }
+  }
+
+  const openBatchMoveDialog = () => {
+    const firstSelectedSiteId = selectedSites[0]
+    const currentCategoryId = firstSelectedSiteId ? getSiteCategory(firstSelectedSiteId) : ''
+    const defaultCategoryId = categoryFilter !== 'all'
+      ? categoryFilter
+      : currentCategoryId || navigationData[0]?.id || ''
+
+    setBatchMoveCategoryId(defaultCategoryId)
+    setBatchMoveSubCategoryId('none')
+    setShowBatchMoveDialog(true)
+  }
+
+  const handleBatchMove = async () => {
+    if (!batchMoveCategoryId || selectedSites.length === 0 || batchOperation) return
+
+    setBatchOperation('move')
+    try {
+      const updatedNavigationData = cloneNavigationData(navigationData)
+      const targetCategoryIndex = updatedNavigationData.findIndex((category) => category.id === batchMoveCategoryId)
+      if (targetCategoryIndex === -1) {
+        throw new Error('目标分类不存在')
+      }
+
+      let targetSubCategoryIndex: number | undefined
+      if (batchMoveSubCategoryId !== 'none') {
+        const subCategoryIndex = updatedNavigationData[targetCategoryIndex].subCategories?.findIndex(
+          (subCategory) => subCategory.id === batchMoveSubCategoryId
+        ) ?? -1
+
+        if (subCategoryIndex === -1) {
+          throw new Error('目标子分类不存在')
+        }
+
+        targetSubCategoryIndex = subCategoryIndex
+      }
+
+      const movedItems: NavigationSubItem[] = []
+
+      for (const siteId of selectedSites) {
+        const location = findSiteLocation(updatedNavigationData, siteId)
+        if (!location) continue
+
+        if (location.subCategoryIndex !== undefined) {
+          const [item] = updatedNavigationData[location.categoryIndex].subCategories![location.subCategoryIndex].items.splice(location.itemIndex, 1)
+          movedItems.push(item)
+        } else {
+          const [item] = updatedNavigationData[location.categoryIndex].items.splice(location.itemIndex, 1)
+          movedItems.push(item)
+        }
+      }
+
+      if (movedItems.length === 0) {
+        throw new Error('没有找到可移动的站点')
+      }
+
+      if (targetSubCategoryIndex !== undefined) {
+        const targetItems = updatedNavigationData[targetCategoryIndex].subCategories![targetSubCategoryIndex].items || []
+        updatedNavigationData[targetCategoryIndex].subCategories![targetSubCategoryIndex].items = [...targetItems, ...movedItems]
+      } else {
+        updatedNavigationData[targetCategoryIndex].items = [
+          ...(updatedNavigationData[targetCategoryIndex].items || []),
+          ...movedItems,
+        ]
+      }
+
+      await saveNavigationItems(updatedNavigationData, '批量移动分类失败')
+
+      toast({
+        title: "成功",
+        description: `已移动 ${movedItems.length} 个站点`,
+      })
+
+      setShowBatchMoveDialog(false)
+      setSelectedSites([])
+    } catch (error) {
+      console.error('Batch move error:', error)
+      toast({
+        title: "错误",
+        description: error instanceof Error ? error.message : "批量移动分类失败",
+        variant: "destructive"
+      })
+    } finally {
+      setBatchOperation(null)
+    }
+  }
+
   const selectedSortCategory = navigationData.find((category) => category.id === sortCategoryId)
   const sortSubCategories = selectedSortCategory?.subCategories || []
+  const selectedBatchMoveCategory = navigationData.find((category) => category.id === batchMoveCategoryId)
+  const batchMoveSubCategories = selectedBatchMoveCategory?.subCategories || []
+  const isBatchWorking = Boolean(batchOperation) || isBatchDeleting
   const hasSortChanges =
     sortItems.length !== sortOriginalItemIds.length ||
     sortItems.some((item, index) => item.id !== sortOriginalItemIds[index])
@@ -1301,27 +1590,6 @@ export default function SiteListPage() {
             </div>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:space-x-0 lg:justify-end">
-            {selectedSites.length > 0 && (
-              <Button
-                variant="destructive"
-                onClick={() => setShowDeleteDialog(true)}
-                className="w-full whitespace-nowrap sm:w-auto"
-                disabled={isBatchDeleting}
-              >
-                {isBatchDeleting ? (
-                  <>
-                    <Icons.loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    删除中...
-                  </>
-                ) : (
-                  <>
-                    <Icons.trash className="mr-2 h-4 w-4" />
-                    删除选中 ({selectedSites.length})
-                  </>
-                )}
-              </Button>
-            )}
-
             <Button
               variant="outline"
               onClick={openSortDialog}
@@ -2003,19 +2271,118 @@ export default function SiteListPage() {
 
         {/* 选择状态栏 */}
         {selectedSites.length > 0 && (
-          <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
-            <div className="flex items-center gap-2">
-              <Icons.check className="h-4 w-4 text-blue-600" />
-              <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
+          <div className="flex flex-col gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-950/20 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 items-center gap-2">
+              <Icons.check className="h-4 w-4 shrink-0 text-blue-600" />
+              <span className="min-w-0 text-sm font-medium text-blue-900 dark:text-blue-100">
                 已选择 {selectedSites.length} 个站点
               </span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleBatchMetadataUpdate('description')}
+                disabled={isBatchWorking}
+                className="border-blue-200 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:text-blue-100 dark:hover:bg-blue-900/40"
+              >
+                {batchOperation === 'description' ? (
+                  <Icons.loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Icons.fileText className="mr-2 h-4 w-4" />
+                )}
+                补全描述
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleBatchMetadataUpdate('icon')}
+                disabled={isBatchWorking}
+                className="border-blue-200 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:text-blue-100 dark:hover:bg-blue-900/40"
+              >
+                {batchOperation === 'icon' ? (
+                  <Icons.loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Icons.refresh className="mr-2 h-4 w-4" />
+                )}
+                刷新图标
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleBatchBooleanUpdate('enable', { enabled: true })}
+                disabled={isBatchWorking}
+                className="border-blue-200 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:text-blue-100 dark:hover:bg-blue-900/40"
+              >
+                {batchOperation === 'enable' ? (
+                  <Icons.loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Icons.check className="mr-2 h-4 w-4" />
+                )}
+                启用
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleBatchBooleanUpdate('disable', { enabled: false })}
+                disabled={isBatchWorking}
+                className="border-blue-200 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:text-blue-100 dark:hover:bg-blue-900/40"
+              >
+                {batchOperation === 'disable' ? (
+                  <Icons.loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Icons.x className="mr-2 h-4 w-4" />
+                )}
+                禁用
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={openBatchMoveDialog}
+                disabled={isBatchWorking || navigationData.length === 0}
+                className="border-blue-200 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:text-blue-100 dark:hover:bg-blue-900/40"
+              >
+                {batchOperation === 'move' ? (
+                  <Icons.loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Icons.folderOpen className="mr-2 h-4 w-4" />
+                )}
+                移动分类
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleBatchBooleanUpdate('private', { isPrivate: true })}
+                disabled={isBatchWorking}
+                className="border-blue-200 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:text-blue-100 dark:hover:bg-blue-900/40"
+              >
+                {batchOperation === 'private' ? (
+                  <Icons.loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Icons.shield className="mr-2 h-4 w-4" />
+                )}
+                设为私有
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleBatchBooleanUpdate('public', { isPrivate: false })}
+                disabled={isBatchWorking}
+                className="border-blue-200 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:text-blue-100 dark:hover:bg-blue-900/40"
+              >
+                {batchOperation === 'public' ? (
+                  <Icons.loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Icons.globe className="mr-2 h-4 w-4" />
+                )}
+                设为公开
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setSelectedSites([])}
-                className="text-blue-600 border-blue-200 hover:bg-blue-100"
+                disabled={isBatchWorking}
+                className="border-blue-200 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:text-blue-100 dark:hover:bg-blue-900/40"
               >
                 取消选择
               </Button>
@@ -2023,7 +2390,7 @@ export default function SiteListPage() {
                 variant="destructive"
                 size="sm"
                 onClick={() => setShowDeleteDialog(true)}
-                disabled={isBatchDeleting}
+                disabled={isBatchWorking}
               >
                 {isBatchDeleting ? (
                   <>
@@ -2033,7 +2400,7 @@ export default function SiteListPage() {
                 ) : (
                   <>
                     <Icons.trash className="mr-2 h-4 w-4" />
-                    批量删除
+                    删除选中
                   </>
                 )}
               </Button>
@@ -2296,6 +2663,84 @@ export default function SiteListPage() {
             )}
           </div>
         )}
+
+        <Dialog open={showBatchMoveDialog} onOpenChange={(open) => {
+          if (!open && batchOperation !== 'move') {
+            setShowBatchMoveDialog(false)
+          }
+        }}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>移动选中站点</DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
+                将 {selectedSites.length} 个站点移动到目标分类末尾。
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="batch-move-category">一级分类</Label>
+                <Select
+                  value={batchMoveCategoryId}
+                  onValueChange={(value) => {
+                    setBatchMoveCategoryId(value)
+                    setBatchMoveSubCategoryId('none')
+                  }}
+                  disabled={batchOperation === 'move'}
+                >
+                  <SelectTrigger id="batch-move-category">
+                    <SelectValue placeholder="选择一级分类" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {navigationData.map((category) => (
+                      <SelectItem key={category.id} value={category.id}>
+                        {category.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="batch-move-subcategory">目标范围</Label>
+                <Select
+                  value={batchMoveSubCategoryId}
+                  onValueChange={setBatchMoveSubCategoryId}
+                  disabled={!batchMoveCategoryId || batchOperation === 'move'}
+                >
+                  <SelectTrigger id="batch-move-subcategory">
+                    <SelectValue placeholder="选择目标范围" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">一级分类直属站点</SelectItem>
+                    {batchMoveSubCategories.map((subCategory) => (
+                      <SelectItem key={subCategory.id} value={subCategory.id}>
+                        {subCategory.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowBatchMoveDialog(false)}
+                disabled={batchOperation === 'move'}
+              >
+                取消
+              </Button>
+              <Button
+                onClick={handleBatchMove}
+                disabled={!batchMoveCategoryId || batchOperation === 'move'}
+              >
+                {batchOperation === 'move' && (
+                  <Icons.loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                {batchOperation === 'move' ? "移动中..." : "移动站点"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <AlertDialog open={showDeleteDialog} onOpenChange={(open) => {
           if (!open && !isBatchDeleting) {
