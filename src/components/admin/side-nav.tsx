@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
+  Activity,
   LayoutDashboard,
   Settings,
   Menu as MenuIcon,
@@ -27,9 +28,14 @@ const sidebarNavItems = [
     icon: MenuIcon,
   },
   {
-    title: "资源管理",
+    title: "图片资源",
     href: "/admin/resources",
     icon: Database,
+  },
+  {
+    title: "系统状态",
+    href: "/admin/system",
+    icon: Activity,
   },
 ]
 
@@ -68,4 +74,4 @@ export function SideNav({ className, ...props }: SideNavProps) {
       </div>
     </div>
   )
-} 
+}

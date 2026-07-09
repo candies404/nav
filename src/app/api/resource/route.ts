@@ -19,7 +19,7 @@ export async function GET() {
         return NextResponse.json(await listManagedResources())
     } catch (error) {
         console.error('Failed to fetch resources:', error)
-        return handleResourceError(error, 'Failed to fetch resources')
+        return handleResourceError(error, '图片资源加载失败')
     }
 }
 
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     } catch (error) {
         console.error('Failed to upload resource:', error)
         return NextResponse.json(
-            { error: error instanceof Error ? error.message : 'Failed to upload resource' },
+            { error: error instanceof Error ? error.message : '图片资源上传失败' },
             { status: isBadResourceRequest(error) ? 400 : 500 }
         )
     }
@@ -51,13 +51,13 @@ export async function DELETE(request: Request) {
         const { resourceHashes } = await request.json()
 
         if (!Array.isArray(resourceHashes) || resourceHashes.length === 0) {
-            return NextResponse.json({ error: 'Invalid resource hashes' }, { status: 400 })
+            return NextResponse.json({ error: '请选择要删除的图片资源' }, { status: 400 })
         }
 
         return NextResponse.json(await deleteManagedResources(resourceHashes))
     } catch (error) {
         console.error('Failed to delete resources:', error)
-        return handleResourceError(error, 'Failed to delete resources')
+        return handleResourceError(error, '图片资源删除失败')
     }
 }
 
@@ -70,5 +70,5 @@ function handleResourceError(error: unknown, fallbackMessage: string) {
 
 function isBadResourceRequest(error: unknown) {
     return error instanceof Error &&
-        (error.message === MISSING_BLOB_CONFIG_MESSAGE || error.message === 'Invalid image payload')
+        (error.message === MISSING_BLOB_CONFIG_MESSAGE || error.message === '图片内容无效')
 }

@@ -21,7 +21,7 @@ function getDownloadName(url: string) {
   }
 
   const safeHostname = hostname.replace(/[^a-z0-9.-]+/gi, '-').replace(/^-+|-+$/g, '')
-  return `${safeHostname || 'site'}-favicon.ico`
+  return `${safeHostname || 'site'}-icon.ico`
 }
 
 export default function FaviconDownloader() {
@@ -53,7 +53,7 @@ export default function FaviconDownloader() {
       const response = await fetch(apiUrl)
 
       if (!response.ok) {
-        throw new Error('无法访问该网站或未找到 Favicon')
+        throw new Error('无法访问该网站或未找到网站图标')
       }
 
       const blob = await response.blob()
@@ -70,7 +70,7 @@ export default function FaviconDownloader() {
 
   const downloadFavicon = () => {
     if (!faviconUrl) {
-      setShowError('请先获取 Favicon。')
+      setShowError('请先获取网站图标。')
       return
     }
 
@@ -96,7 +96,7 @@ export default function FaviconDownloader() {
 
   const saveToResourceLibrary = async () => {
     if (!faviconBlob) {
-      setShowError('请先获取 Favicon。')
+      setShowError('请先获取网站图标。')
       return
     }
 
@@ -108,17 +108,17 @@ export default function FaviconDownloader() {
       const result = await uploadResourceImage(image)
 
       if (!result.imageUrl) {
-        throw new Error('未获取到资源库地址')
+        throw new Error('未获取到图片资源地址')
       }
 
       setResourceUrl(result.imageUrl)
       toast({
         title: '已保存',
-        description: 'Favicon 已保存到资源库',
+        description: '网站图标已保存为图片资源',
       })
     } catch (error) {
       console.error('Save favicon to resource library failed:', error)
-      setShowError(error instanceof Error ? error.message : '保存到资源库失败。')
+      setShowError(error instanceof Error ? error.message : '保存到图片资源失败。')
     } finally {
       setIsSaving(false)
     }
@@ -133,13 +133,13 @@ export default function FaviconDownloader() {
       <div className="space-y-1">
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">网站图标下载</h1>
         <p className="text-sm text-muted-foreground">
-          获取站点 favicon，并按域名生成下载文件名。
+          获取指定站点的网站图标，并按域名生成下载文件名。
         </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">获取 Favicon</CardTitle>
+          <CardTitle className="text-base">获取网站图标</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <Input
@@ -158,7 +158,7 @@ export default function FaviconDownloader() {
               variant="outline"
             >
               <Search className="mr-2 h-4 w-4" />
-              {isLoading ? '获取中...' : 'Google Favicon'}
+              {isLoading ? '获取中...' : 'Google 图标源'}
             </Button>
             <Button
               type="button"
@@ -167,7 +167,7 @@ export default function FaviconDownloader() {
               variant="outline"
             >
               <Search className="mr-2 h-4 w-4" />
-              {isLoading ? '获取中...' : 'Favicon.im'}
+              {isLoading ? '获取中...' : '备用图标源'}
             </Button>
           </div>
 
@@ -177,14 +177,14 @@ export default function FaviconDownloader() {
                 <div className="flex min-w-0 items-center gap-3">
                   <Image
                     src={faviconUrl}
-                    alt="Favicon"
+                    alt="网站图标"
                     width={48}
                     height={48}
                     unoptimized
                     className="h-12 w-12 rounded border bg-background object-contain p-1"
                   />
                   <div className="min-w-0">
-                    <div className="text-sm font-medium">Favicon 已获取</div>
+                    <div className="text-sm font-medium">网站图标已获取</div>
                     <div className="truncate text-xs text-muted-foreground">
                       {resourceUrl || getDownloadName(url)}
                     </div>
@@ -202,7 +202,7 @@ export default function FaviconDownloader() {
                     disabled={isSaving}
                   >
                     <UploadCloud className="mr-2 h-4 w-4" />
-                    {isSaving ? '保存中...' : '保存到资源库'}
+                    {isSaving ? '保存中...' : '保存为图片资源'}
                   </Button>
                 </div>
               </div>
@@ -221,10 +221,10 @@ export default function FaviconDownloader() {
                 {resourceUrl && (
                   <Button
                     type="button"
-                    onClick={() => copyToClipboard(resourceUrl, '已复制资源库地址')}
+                    onClick={() => copyToClipboard(resourceUrl, '已复制图片资源地址')}
                   >
                     <Copy className="mr-2 h-4 w-4" />
-                    复制资源地址
+                    复制图片资源地址
                   </Button>
                 )}
               </div>

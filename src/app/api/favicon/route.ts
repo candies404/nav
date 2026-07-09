@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
     try {
         const response = await fetch(faviconUrl);
         if (!response.ok) {
-            return NextResponse.json({ error: '无法访问该网站或未找到 Favicon' }, { status: response.status });
+            return NextResponse.json({ error: '无法访问该网站或未找到网站图标' }, { status: response.status });
         }
         const arrayBuffer = await response.arrayBuffer();
         return new NextResponse(arrayBuffer, {

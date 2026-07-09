@@ -221,7 +221,7 @@ export default function SiteSettings() {
                       name="appearance.favicon"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Favicon URL</FormLabel>
+                          <FormLabel>网站图标 URL</FormLabel>
                           <FormControl>
                             <Input placeholder="输入网站图标URL" {...field} />
                           </FormControl>

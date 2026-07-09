@@ -8,6 +8,7 @@ import Link from 'next/link'
 import { signOut } from 'next-auth/react'
 import { useTheme } from 'next-themes'
 import {
+  Activity,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -77,12 +78,12 @@ const menuItems = [
     ],
   },
   {
-    title: '资源管理',
+    title: '图片资源',
     href: '/admin/resources',
     icon: Settings,
     subItems: [
       {
-        title: '资源管理',
+        title: '图片资源',
         href: '/admin/resources',
       },
       {
@@ -95,6 +96,11 @@ const menuItems = [
     title: '数据管理',
     href: '/admin/data',
     icon: Database,
+  },
+  {
+    title: '系统状态',
+    href: '/admin/system',
+    icon: Activity,
   },
   {
     title: '站点设置',

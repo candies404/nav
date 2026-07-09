@@ -23,7 +23,8 @@ import {
   Search,
   Trash2,
   CheckSquare,
-  Square
+  Square,
+  ImageIcon
 } from "lucide-react"
 import {
   Dialog,
@@ -65,7 +66,8 @@ const Icons = {
   search: Search,
   trash2: Trash2,
   checkSquare: CheckSquare,
-  square: Square
+  square: Square,
+  imageIcon: ImageIcon
 }
 
 const formSchema = z.object({
@@ -105,6 +107,13 @@ function formatDate(value?: string) {
   if (Number.isNaN(date.getTime())) return ''
 
   return date.toLocaleDateString('zh-CN')
+}
+
+function isAutoCachedIcon(resource: ResourceCardResource) {
+  const item = resource.items[0]
+  const pathname = item?.pathname || resource.id || ''
+
+  return pathname.startsWith('favicons/') || pathname.startsWith('favicons_')
 }
 
 
@@ -153,6 +162,9 @@ export default function ResourceManagement() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [resourceReferences, setResourceReferences] = useState<ResourceReferenceMap>({});
 
+  const manualResourceCount = resources.filter((resource) => !isAutoCachedIcon(resource)).length;
+  const cachedIconCount = resources.length - manualResourceCount;
+
   const fetchResources = async () => {
     try {
       setIsLoading(true);
@@ -162,7 +174,7 @@ export default function ResourceManagement() {
       if (error instanceof Error) {
         setError(error.message);
       } else {
-        setError('An unknown error occurred');
+        setError('图片资源加载失败');
       }
     } finally {
       setIsLoading(false);
@@ -193,7 +205,7 @@ export default function ResourceManagement() {
 
       toast({
         title: "成功",
-        description: "资源已上传",
+        description: "图片资源已上传",
       });
       setIsDialogOpen(false);
       form.reset();
@@ -211,13 +223,13 @@ export default function ResourceManagement() {
       if (error instanceof Error) {
         toast({
           title: "错误",
-          description: error.message || "上传资源失败",
+          description: error.message || "上传图片资源失败",
           variant: "destructive",
         });
       } else {
         toast({
           title: "错误",
-          description: "上传资源失败",
+          description: "上传图片资源失败",
           variant: "destructive",
         });
       }
@@ -290,12 +302,12 @@ export default function ResourceManagement() {
     navigator.clipboard.writeText(url).then(() => {
       toast({
         title: "成功",
-        description: "链接已复制到剪贴板",
+        description: "图片资源地址已复制到剪贴板",
       });
     }).catch(() => {
       toast({
         title: "错误",
-        description: "复制链接失败",
+        description: "复制图片资源地址失败",
         variant: "destructive",
       });
     });
@@ -366,7 +378,7 @@ export default function ResourceManagement() {
 
       toast({
         title: "成功",
-        description: result.message || `成功删除 ${selectedResources.size} 个资源`,
+        description: result.message || `成功删除 ${selectedResources.size} 个图片资源`,
       });
 
       // 刷新资源列表
@@ -376,7 +388,7 @@ export default function ResourceManagement() {
     } catch (error) {
       toast({
         title: "错误",
-        description: error instanceof Error ? error.message : "删除资源失败",
+        description: error instanceof Error ? error.message : "删除图片资源失败",
         variant: "destructive",
       });
     } finally {
@@ -437,14 +449,54 @@ export default function ResourceManagement() {
         </div>
       )}
 
-      <div className="space-y-4 p-3 sm:p-6">
+      <div className="space-y-5 p-3 sm:p-6">
         <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 space-y-1">
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">图片资源</h1>
+              <p className="text-sm text-muted-foreground">
+                手动上传资源和自动缓存图标统一在这里查看，自动缓存图标会单独标记。
+              </p>
+            </div>
+            <Button onClick={() => setIsDialogOpen(true)} className="w-full sm:w-auto">
+              <Icons.plus className="mr-2 h-4 w-4" />
+              上传手动资源
+            </Button>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-lg border bg-background p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Icons.upload className="h-4 w-4 text-blue-600" />
+                  手动上传资源
+                </div>
+                <div className="text-2xl font-semibold">{manualResourceCount}</div>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                由后台上传或网站图标下载保存，适合 Logo、封面和手动维护图标。
+              </p>
+            </div>
+            <div className="rounded-lg border bg-background p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Icons.imageIcon className="h-4 w-4 text-emerald-600" />
+                  自动缓存图标
+                </div>
+                <div className="text-2xl font-semibold">{cachedIconCount}</div>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                由站点信息补全或刷新图标任务生成，用于导航站点图标。
+              </p>
+            </div>
+          </div>
+
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
               <div className="relative w-full sm:w-auto">
                 <Icons.search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
-                  placeholder="搜索资源..."
+                  placeholder="搜索图片资源..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-10 sm:max-w-md"
@@ -464,7 +516,7 @@ export default function ResourceManagement() {
                     ) : (
                       <Icons.square className="h-4 w-4" />
                     )}
-                    全选 ({selectedResources.size}/{filteredResources.length})
+                    全选图片资源 ({selectedResources.size}/{filteredResources.length})
                   </Button>
 
                   {selectedResources.size > 0 && (
@@ -481,15 +533,10 @@ export default function ResourceManagement() {
                 </div>
               )}
             </div>
-
-            <Button onClick={() => setIsDialogOpen(true)} className="w-full sm:w-auto">
-              <Icons.plus className="mr-2 h-4 w-4" />
-              上传资源
-            </Button>
           </div>
 
           <div className="text-xs text-muted-foreground">
-            当前显示：Vercel Blob 实际资源
+            当前显示：全部图片资源，包含手动上传资源和自动缓存图标
           </div>
 
           {/* 添加搜索框 */}
@@ -509,82 +556,91 @@ export default function ResourceManagement() {
           <ResourceGridSkeleton />
         ) : filteredResources.length > 0 ? (
           <div className="grid grid-cols-2 gap-2 min-[420px]:grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10">
-            {filteredResources.map((resource, index) => (
-              <div
-                key={index}
-                className={`group bg-white rounded-lg border shadow-sm hover:shadow-md transition-all duration-200 ${selectedResources.has(resource.id) ? 'ring-2 ring-blue-500 border-blue-500' : ''
-                  }`}
-              >
-                <div className="relative aspect-square">
-                  {/* 选择框 */}
-                  <div className="absolute top-2 left-2 z-10">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => toggleResourceSelection(resource.id)}
-                      className="h-6 w-6 p-0 bg-white/80 backdrop-blur-sm hover:bg-white/90"
-                    >
-                      {selectedResources.has(resource.id) ? (
-                        <Icons.checkSquare className="h-3 w-3 text-blue-600" />
-                      ) : (
-                        <Icons.square className="h-3 w-3 text-gray-600" />
+            {filteredResources.map((resource, index) => {
+              const cachedIcon = isAutoCachedIcon(resource)
+              const resourceKind = cachedIcon ? '自动缓存图标' : '手动上传资源'
+
+              return (
+                <div
+                  key={index}
+                  className={`group bg-white rounded-lg border shadow-sm hover:shadow-md transition-all duration-200 ${selectedResources.has(resource.id) ? 'ring-2 ring-blue-500 border-blue-500' : ''
+                    }`}
+                >
+                  <div className="relative aspect-square">
+                    {/* 选择框 */}
+                    <div className="absolute top-2 left-2 z-10">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleResourceSelection(resource.id)}
+                        className="h-6 w-6 p-0 bg-white/80 backdrop-blur-sm hover:bg-white/90"
+                      >
+                        {selectedResources.has(resource.id) ? (
+                          <Icons.checkSquare className="h-3 w-3 text-blue-600" />
+                        ) : (
+                          <Icons.square className="h-3 w-3 text-gray-600" />
+                        )}
+                      </Button>
+                    </div>
+                    <div className="absolute right-2 top-2 z-10 rounded-full bg-white/90 px-1.5 py-0.5 text-[9px] font-medium text-gray-700 shadow-sm">
+                      {cachedIcon ? '自动图标' : '手动资源'}
+                    </div>
+
+                    <Image
+                      src={resource.items[0].url}
+                      alt={`图片资源 ${index + 1}`}
+                      fill
+                      unoptimized
+                      sizes="(min-width: 1024px) 160px, (min-width: 640px) 25vw, 50vw"
+                      className="rounded-t-lg object-cover"
+                    />
+                    {/* 图片遮罩层和预览按钮 - 进一步缩小 */}
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
+                      <a
+                        href={resource.items[0].url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="bg-white/10 backdrop-blur-sm text-white px-1.5 py-0.5 rounded-full
+                                 hover:bg-white/20 transition-colors duration-200 flex items-center gap-0.5 text-[10px]"
+                      >
+                        <Icons.upload className="h-2 w-2" />
+                        查看
+                      </a>
+                    </div>
+                  </div>
+                  <div className="p-1.5 space-y-1">
+                    {/* 文件名和上传时间 */}
+                    <div className="space-y-0.5">
+                      <p className="text-[10px] text-gray-500 truncate" title={resource.items[0].pathname || resource.items[0].url}>
+                        {(resource.items[0].pathname || resource.items[0].url).split('/').pop()}
+                      </p>
+                      <p className="text-[9px] text-gray-400 truncate">{resourceKind}</p>
+                      {(resource.items[0].size || resource.items[0].uploadedAt) && (
+                        <p className="text-[9px] text-gray-400 truncate">
+                          {[formatBytes(resource.items[0].size), formatDate(resource.items[0].uploadedAt)].filter(Boolean).join(' · ')}
+                        </p>
                       )}
+                    </div>
+                    {/* 复制链接按钮 - 进一步缩小 */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => copyToClipboard(resource.items[0].url)}
+                      className="w-full h-5 text-[8px] flex items-center justify-center gap-0.5 hover:bg-gray-50"
+                    >
+                      <Icons.copy className="h-2 w-2" />
+                      复制地址
                     </Button>
                   </div>
-
-                  <Image
-                    src={resource.items[0].url}
-                    alt={`Resource ${index + 1}`}
-                    fill
-                    unoptimized
-                    sizes="(min-width: 1024px) 160px, (min-width: 640px) 25vw, 50vw"
-                    className="rounded-t-lg object-cover"
-                  />
-                  {/* 图片遮罩层和预览按钮 - 进一步缩小 */}
-                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
-                    <a
-                      href={resource.items[0].url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-white/10 backdrop-blur-sm text-white px-1.5 py-0.5 rounded-full 
-                               hover:bg-white/20 transition-colors duration-200 flex items-center gap-0.5 text-[10px]"
-                    >
-                      <Icons.upload className="h-2 w-2" />
-                      查看
-                    </a>
-                  </div>
                 </div>
-                <div className="p-1.5 space-y-1">
-                  {/* 文件名和上传时间 */}
-                  <div className="space-y-0.5">
-                    <p className="text-[10px] text-gray-500 truncate" title={resource.items[0].pathname || resource.items[0].url}>
-                      {(resource.items[0].pathname || resource.items[0].url).split('/').pop()}
-                    </p>
-                    {(resource.items[0].size || resource.items[0].uploadedAt) && (
-                      <p className="text-[9px] text-gray-400 truncate">
-                        {[formatBytes(resource.items[0].size), formatDate(resource.items[0].uploadedAt)].filter(Boolean).join(' · ')}
-                      </p>
-                    )}
-                  </div>
-                  {/* 复制链接按钮 - 进一步缩小 */}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => copyToClipboard(resource.items[0].url)}
-                    className="w-full h-5 text-[8px] flex items-center justify-center gap-0.5 hover:bg-gray-50"
-                  >
-                    <Icons.copy className="h-2 w-2" />
-                    复制链接
-                  </Button>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed rounded-lg bg-muted/50">
             <Icons.inbox className="h-10 w-10 text-gray-400 mb-2" />
             <p className="text-gray-500">
-              {searchQuery ? '未找到匹配的资源' : '暂无资源'}
+              {searchQuery ? '未找到匹配的图片资源' : '暂无图片资源'}
             </p>
             {!searchQuery && (
               <Button
@@ -592,7 +648,7 @@ export default function ResourceManagement() {
                 onClick={() => setIsDialogOpen(true)}
                 className="mt-4"
               >
-                上传第一个资源
+                上传第一个手动资源
               </Button>
             )}
           </div>
@@ -611,7 +667,7 @@ export default function ResourceManagement() {
       }}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>上传资源</DialogTitle>
+            <DialogTitle>上传手动资源</DialogTitle>
             <DialogDescription>
               请选择或拖拽图片文件到此处上传。
             </DialogDescription>
@@ -651,7 +707,7 @@ export default function ResourceManagement() {
                               <div className="relative h-48 w-full">
                                 <Image
                                   src={selectedImage}
-                                  alt="Preview"
+                                  alt="图片预览"
                                   fill
                                   unoptimized
                                   sizes="384px"
@@ -721,10 +777,10 @@ export default function ResourceManagement() {
           <DialogHeader className="flex-shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <Icons.alertCircle className="h-5 w-5 text-red-500" />
-              确认删除资源
+              确认删除图片资源
             </DialogTitle>
             <DialogDescription>
-              您即将删除 {selectedResources.size} 个资源，此操作不可撤销。
+              您即将删除 {selectedResources.size} 个图片资源，此操作不可撤销。
             </DialogDescription>
           </DialogHeader>
 
@@ -736,7 +792,7 @@ export default function ResourceManagement() {
                   <Icons.alertCircle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
                   <div className="space-y-2 min-w-0">
                     <p className="text-sm font-medium text-yellow-800">
-                      以下资源正在被使用中：
+                      以下图片资源正在被使用中：
                     </p>
                     <div className="max-h-24 overflow-y-auto space-y-2">
                       {Object.entries(resourceReferences).map(([resourcePath, refs]) =>
@@ -762,7 +818,7 @@ export default function ResourceManagement() {
                       )}
                     </div>
                     <p className="text-xs text-yellow-600">
-                      删除这些资源可能会导致相关功能异常，请确认是否继续。
+                      删除这些图片资源可能会导致相关功能异常，请确认是否继续。
                     </p>
                   </div>
                 </div>
@@ -773,11 +829,11 @@ export default function ResourceManagement() {
             <div className="flex-1 overflow-hidden">
               <div className="flex items-center justify-between mb-3">
                 <p className="text-sm font-medium text-gray-700">
-                  将要删除的资源 ({selectedResources.size} 个)：
+                  将要删除的图片资源 ({selectedResources.size} 个)：
                 </p>
                 {selectedResources.size > 12 && (
                   <p className="text-xs text-gray-500">
-                    显示前 12 个，共 {selectedResources.size} 个
+                    显示前 12 个，共 {selectedResources.size} 个图片资源
                   </p>
                 )}
               </div>
@@ -792,7 +848,7 @@ export default function ResourceManagement() {
                         <div key={index} className="relative aspect-square group">
                           <Image
                             src={resource.items[0].url}
-                            alt="Resource"
+                            alt="图片资源"
                             fill
                             unoptimized
                             sizes="96px"
@@ -817,7 +873,7 @@ export default function ResourceManagement() {
                         <div key={index} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
                           <Image
                             src={resource.items[0].url}
-                            alt="Resource"
+                            alt="图片资源"
                             width={48}
                             height={48}
                             unoptimized
@@ -838,7 +894,7 @@ export default function ResourceManagement() {
                     {selectedResources.size > 12 && (
                       <div className="text-center py-3 border-t border-gray-200">
                         <p className="text-sm text-gray-500">
-                          还有 {selectedResources.size - 12} 个资源将被删除
+                          还有 {selectedResources.size - 12} 个图片资源将被删除
                         </p>
                       </div>
                     )}

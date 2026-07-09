@@ -1051,7 +1051,7 @@ export default function DataManagementPage() {
                             暂无历史版本
                           </div>
                           <div>
-                            当前 Upstash Redis/KV 中没有可恢复的历史版本，可使用 <code className="rounded bg-white/70 px-1 py-0.5">navigation-default.json</code> 恢复初始化数据。
+                            当前没有可恢复的在线历史版本，可使用 <code className="rounded bg-white/70 px-1 py-0.5">navigation-default.json</code> 恢复初始化数据。
                           </div>
                         </div>
 

@@ -9,7 +9,7 @@ import type { NavigationData } from '@/types/navigation'
 import type { SiteConfig } from '@/types/site'
 
 export const MISSING_BLOB_CONFIG_MESSAGE =
-  '未配置 Blob 写入能力。资源管理只显示 Vercel Blob 实际资源，请配置 BLOB_READ_WRITE_TOKEN；Public Store 可同时配置 BLOB_STORE_ID。'
+  '图片资源库未配置写入能力。请在系统状态中检查图片资源配置。'
 
 export type ManagedResource = {
   commit: string
@@ -70,7 +70,7 @@ export async function uploadManagedResource(input: {
   assertResourceStorageConfigured()
 
   if (typeof input.image !== 'string' || !input.image.includes(',')) {
-    throw new Error('Invalid image payload')
+    throw new Error('图片内容无效')
   }
 
   const [header, base64Data] = input.image.split(',', 2)
@@ -97,7 +97,7 @@ export async function deleteManagedResources(resourceHashes: string[]) {
     success: true,
     deletedCount: deletedBlobCount,
     deletedBlobCount,
-    message: `成功删除 ${deletedBlobCount} 个资源`,
+    message: `成功删除 ${deletedBlobCount} 个图片资源`,
   }
 }
 

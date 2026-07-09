@@ -16,7 +16,7 @@ type DataCacheEntry = {
 }
 
 const MISSING_REDIS_CONFIG_MESSAGE =
-  '未配置 KV_REST_API_URL 或 KV_REST_API_TOKEN。当前只能读取内置默认数据，后台保存需要先配置 Upstash Redis/KV REST 数据库。'
+  '数据存储未配置。当前只能读取内置默认数据，后台保存需要先在系统状态中检查数据存储配置。'
 
 export type StoredAsset = {
   id: string

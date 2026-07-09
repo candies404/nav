@@ -3,7 +3,7 @@ export const runtime = 'edge'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Settings, Menu, Database, Folders, FolderTree, Globe, RefreshCw } from 'lucide-react'
+import { Activity, Settings, Menu, Database, Folders, FolderTree, Globe, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
@@ -97,10 +97,16 @@ export default function AdminDashboard() {
       description: '集中新增、编辑、移动和删除具体网站'
     },
     {
-      title: '资源管理',
+      title: '图片资源',
       icon: Database,
       href: '/admin/resources',
-      description: '管理网站的资源内容和分类'
+      description: '管理手动上传资源和自动缓存图标'
+    },
+    {
+      title: '系统状态',
+      icon: Activity,
+      href: '/admin/system',
+      description: '查看关键存储配置和后台能力状态'
     }
   ]
 

@@ -45,15 +45,15 @@ type UploadProgressHandlers = {
 
 export async function listResources() {
   const response = await fetch('/api/resource')
-  const data = await readJsonResponse<{ metadata?: ResourceMetadataItem[] }>(response, '加载资源失败')
+  const data = await readJsonResponse<{ metadata?: ResourceMetadataItem[] }>(response, '加载图片资源失败')
 
   if (!Array.isArray(data.metadata)) {
-    throw new Error('Metadata is not available or is not an array')
+    throw new Error('图片资源数据不可用')
   }
 
   return data.metadata.map<ResourceCardResource>((item, index) => ({
     id: item.hash,
-    title: item.pathname || item.path || `Resource ${index + 1}`,
+    title: item.pathname || item.path || `图片资源 ${index + 1}`,
     items: [{
       title: item.pathname || item.path,
       description: '',
@@ -75,7 +75,7 @@ export async function uploadResourceImage(image: string) {
     body: JSON.stringify({ image }),
   })
 
-  return readJsonResponse<UploadResourceResponse>(response, '上传资源失败')
+  return readJsonResponse<UploadResourceResponse>(response, '上传图片资源失败')
 }
 
 export function uploadResourceImageWithProgress(
@@ -108,7 +108,7 @@ export function uploadResourceImageWithProgress(
         return
       }
 
-      reject(new Error(getXhrErrorMessage(xhr, '上传资源失败')))
+      reject(new Error(getXhrErrorMessage(xhr, '上传图片资源失败')))
     }
 
     xhr.onerror = () => reject(new Error('网络错误，上传失败'))
@@ -138,7 +138,7 @@ export async function deleteResources(resourceHashes: string[]) {
 
   return readJsonResponse<{ success: boolean; deletedCount: number; message?: string }>(
     response,
-    '删除资源失败'
+    '删除图片资源失败'
   )
 }
 
@@ -152,7 +152,7 @@ export async function checkResourceReferences(resourcePaths: string[]) {
   })
   const data = await readJsonResponse<{ references: ResourceReferenceMap }>(
     response,
-    '检查资源引用失败'
+    '检查图片资源引用失败'
   )
 
   return data.references

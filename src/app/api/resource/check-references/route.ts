@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     const { resourcePaths } = await request.json()
 
     if (!Array.isArray(resourcePaths)) {
-      return NextResponse.json({ error: 'Invalid resource paths' }, { status: 400 })
+      return NextResponse.json({ error: '图片资源地址无效' }, { status: 400 })
     }
 
     const references = await checkManagedResourceReferences(resourcePaths)
@@ -22,6 +22,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ references })
   } catch (error) {
     console.error('Failed to check resource references:', error)
-    return NextResponse.json({ error: 'Failed to check resource references' }, { status: 500 })
+    return NextResponse.json({ error: '检查图片资源引用失败' }, { status: 500 })
   }
 }
