@@ -154,20 +154,6 @@ export function JsonEditor({
             )}
           </div>
         </div>
-        <div className="flex items-center gap-4 text-xs text-muted-foreground">
-          <div className="flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 bg-background border rounded text-xs">Ctrl+S</kbd>
-            <span>保存</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 bg-background border rounded text-xs">Alt+Shift+F</kbd>
-            <span>格式化</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 bg-background border rounded text-xs">Ctrl+F</kbd>
-            <span>查找</span>
-          </div>
-        </div>
       </div>
 
       {/* Monaco Editor */}
