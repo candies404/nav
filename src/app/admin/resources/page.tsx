@@ -486,7 +486,7 @@ export default function ResourceManagement() {
                 <div className="text-2xl font-semibold">{cachedIconCount}</div>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">
-                由站点信息补全或刷新图标任务生成，用于导航站点图标。
+                由新增或编辑站点时的网站信息获取流程生成，用于导航站点图标。
               </p>
             </div>
           </div>

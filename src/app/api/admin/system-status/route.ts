@@ -23,8 +23,6 @@ const REDIS_KEY_PREFIX = process.env.UPSTASH_REDIS_KEY_PREFIX || 'navsphere'
 const BLOB_TOKEN = process.env.BLOB_READ_WRITE_TOKEN
 const BLOB_STORE_ID = process.env.BLOB_STORE_ID
 const DATA_HISTORY_LIMIT = process.env.NAVSPHERE_DATA_HISTORY_LIMIT || '10'
-const FAVICON_BATCH_SIZE = process.env.NAVSPHERE_FAVICON_BATCH_SIZE || '40'
-const FAVICON_BATCH_CONCURRENCY = process.env.NAVSPHERE_FAVICON_BATCH_CONCURRENCY || '6'
 
 export async function GET() {
   const session = await auth()
@@ -46,8 +44,6 @@ export async function GET() {
       redisRestHost: getHostName(REDIS_URL),
       blobStoreIdConfigured: Boolean(BLOB_STORE_ID),
       dataHistoryLimit: DATA_HISTORY_LIMIT,
-      faviconBatchSize: FAVICON_BATCH_SIZE,
-      faviconBatchConcurrency: FAVICON_BATCH_CONCURRENCY,
     },
     services: [redis, blob],
     capabilities,

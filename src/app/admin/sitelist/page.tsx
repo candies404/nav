@@ -88,7 +88,7 @@ type SiteLocation = {
   itemIndex: number
 }
 
-type BatchOperation = 'description' | 'icon' | 'enable' | 'disable' | 'private' | 'public' | 'move' | null
+type BatchOperation = 'enable' | 'disable' | 'private' | 'public' | 'move' | null
 
 export default function SiteListPage() {
   const { toast } = useToast()
@@ -1239,8 +1239,6 @@ export default function SiteListPage() {
 
   const getBatchOperationLabel = (operation: Exclude<BatchOperation, null>) => {
     const labels: Record<Exclude<BatchOperation, null>, string> = {
-      description: '补全描述',
-      icon: '刷新图标',
       enable: '启用',
       disable: '禁用',
       private: '设为私有',
@@ -1249,101 +1247,6 @@ export default function SiteListPage() {
     }
 
     return labels[operation]
-  }
-
-  const handleBatchMetadataUpdate = async (field: 'description' | 'icon') => {
-    if (selectedSites.length === 0 || batchOperation) return
-
-    setBatchOperation(field)
-    try {
-      const updatedNavigationData = cloneNavigationData(navigationData)
-      let processed = 0
-      let updated = 0
-      let failed = 0
-
-      for (const siteId of selectedSites) {
-        const location = findSiteLocation(updatedNavigationData, siteId)
-        if (!location) {
-          failed += 1
-          continue
-        }
-
-        const item = getItemAtLocation(updatedNavigationData, location)
-
-        try {
-          if (!isValidUrl(item.href)) {
-            failed += 1
-            continue
-          }
-
-          if (field === 'description' && item.description?.trim()) {
-            processed += 1
-            continue
-          }
-
-          const response = await fetch('/api/website-metadata', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ url: item.href }),
-          })
-
-          if (!response.ok) {
-            throw new Error('获取网站信息失败')
-          }
-
-          const metadata = await response.json() as { description?: string; icon?: string }
-
-          if (field === 'description') {
-            const description = metadata.description?.trim()
-            if (description && item.description !== description) {
-              item.description = description
-              updated += 1
-            }
-          } else {
-            const icon = metadata.icon?.trim()
-            if (icon && item.icon !== icon) {
-              item.icon = icon
-              updated += 1
-            }
-          }
-
-          processed += 1
-        } catch (error) {
-          failed += 1
-          console.warn('Batch metadata update failed:', {
-            site: item.title,
-            href: item.href,
-            error,
-          })
-        }
-      }
-
-      if (updated > 0) {
-        await saveNavigationItems(
-          updatedNavigationData,
-          field === 'description' ? '批量补全描述失败' : '批量刷新图标失败'
-        )
-      }
-
-      toast({
-        title: updated > 0 ? "成功" : "完成",
-        description: field === 'description'
-          ? `已检查 ${processed} 个站点，补全描述 ${updated} 个${failed > 0 ? `，失败 ${failed} 个` : ''}`
-          : `已检查 ${processed} 个站点，刷新图标 ${updated} 个${failed > 0 ? `，失败 ${failed} 个` : ''}`,
-        variant: failed > 0 && updated === 0 ? "destructive" : "default",
-      })
-    } catch (error) {
-      console.error('Batch metadata update error:', error)
-      toast({
-        title: "错误",
-        description: error instanceof Error ? error.message : getBatchOperationLabel(field),
-        variant: "destructive"
-      })
-    } finally {
-      setBatchOperation(null)
-    }
   }
 
   const handleBatchBooleanUpdate = async (
@@ -2279,34 +2182,6 @@ export default function SiteListPage() {
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleBatchMetadataUpdate('description')}
-                disabled={isBatchWorking}
-                className="border-blue-200 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:text-blue-100 dark:hover:bg-blue-900/40"
-              >
-                {batchOperation === 'description' ? (
-                  <Icons.loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Icons.fileText className="mr-2 h-4 w-4" />
-                )}
-                补全描述
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleBatchMetadataUpdate('icon')}
-                disabled={isBatchWorking}
-                className="border-blue-200 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:text-blue-100 dark:hover:bg-blue-900/40"
-              >
-                {batchOperation === 'icon' ? (
-                  <Icons.loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Icons.refresh className="mr-2 h-4 w-4" />
-                )}
-                刷新图标
-              </Button>
               <Button
                 variant="outline"
                 size="sm"

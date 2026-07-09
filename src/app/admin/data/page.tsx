@@ -17,7 +17,6 @@ import {
   CheckCircle,
   XCircle,
   Upload,
-  CloudUpload,
   Database,
   Eye,
   FileJson,
@@ -184,7 +183,6 @@ export default function DataManagementPage() {
   const [navigationData, setNavigationData] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  const [isCachingIcons, setIsCachingIcons] = useState(false)
   const [isRestoreDialogOpen, setIsRestoreDialogOpen] = useState(false)
   const [isJsonValid, setIsJsonValid] = useState(true)
   const [jsonError, setJsonError] = useState('')
@@ -518,50 +516,6 @@ export default function DataManagementPage() {
     }
   }, [loadHistoryVersions, navigationData, savedNavigationData, toast, validateJson])
 
-  const cacheFavicons = async () => {
-    setIsCachingIcons(true)
-    try {
-      const response = await fetch('/api/admin/favicon-cache', {
-        method: 'POST',
-      })
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.details || result.error || '图标与描述补全失败')
-      }
-
-      if (result.started) {
-        toast({
-          title: "已启动",
-          description: `图标与描述补全任务已在后台启动，共 ${result.queued} 个待处理，每批 ${result.batchSize} 个，预计 ${result.batches} 批。稍后同步最新数据可查看补全后的图标地址和站点描述。`,
-        })
-        return
-      }
-
-      await loadNavigationData()
-
-      toast({
-        title: result.message || "完成",
-        description: result.processed !== undefined
-          ? `已处理 ${result.processed} 个，更新图标 ${result.iconUpdated || 0} 个，补全描述 ${result.descriptionUpdated || 0} 个，失败 ${result.failed} 个${result.remaining > 0 ? `，剩余 ${result.remaining} 个可继续处理` : ''}`
-          : result.message || `当前共有 ${result.totalCandidates || 0} 个待补全站点`,
-      })
-    } catch (error) {
-      console.error('Cache favicons error:', error)
-      toast({
-        title: "错误",
-        description: (error as Error).message || "图标与描述补全失败",
-        variant: "destructive",
-      })
-    } finally {
-      setIsCachingIcons(false)
-    }
-  }
-
-
-
-
-
   // 下载数据到本地
   const downloadData = useCallback(() => {
     if (!validateJson(navigationData)) {
@@ -824,15 +778,6 @@ export default function DataManagementPage() {
                 >
                   <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                   同步最新数据
-                </Button>
-                <Button
-                  onClick={cacheFavicons}
-                  disabled={isLoading || isSaving || isCachingIcons}
-                  variant="outline"
-                  className="h-12 w-full justify-start"
-                >
-                  <CloudUpload className={`mr-2 h-4 w-4 ${isCachingIcons ? 'animate-spin' : ''}`} />
-                  补全图标与描述
                 </Button>
                 <Button
                   type="button"

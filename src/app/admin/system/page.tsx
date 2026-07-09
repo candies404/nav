@@ -39,8 +39,6 @@ type SystemStatus = {
     redisRestHost: string
     blobStoreIdConfigured: boolean
     dataHistoryLimit: string
-    faviconBatchSize: string
-    faviconBatchConcurrency: string
   }
   services: StatusItem[]
   capabilities: StatusItem[]
@@ -208,8 +206,6 @@ export default function AdminSystemStatusPage() {
             <ConfigItem label="Redis Key Prefix" value={status.environment.redisKeyPrefix} />
             <ConfigItem label="Blob Store ID" value={status.environment.blobStoreIdConfigured ? '已配置' : '未配置'} />
             <ConfigItem label="历史版本保留" value={`${status.environment.dataHistoryLimit} 个版本`} />
-            <ConfigItem label="图标任务批量大小" value={status.environment.faviconBatchSize} />
-            <ConfigItem label="图标任务并发数" value={status.environment.faviconBatchConcurrency} />
           </div>
           <div className="text-xs text-muted-foreground">
             最近检查：{formatTime(status.checkedAt)}
