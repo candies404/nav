@@ -9,7 +9,6 @@ import {
   Database,
   HardDrive,
   History,
-  ImageIcon,
   RefreshCw,
   ServerCog,
   ShieldAlert,
@@ -77,8 +76,6 @@ const serviceIcons: Record<string, typeof Database> = {
   blob: HardDrive,
   'navigation-data': Database,
   history: History,
-  resources: ImageIcon,
-  'favicon-cache': ImageIcon,
 }
 
 export default function AdminSystemStatusPage() {

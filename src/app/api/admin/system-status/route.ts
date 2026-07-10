@@ -35,7 +35,7 @@ export async function GET() {
     checkBlobStatus(),
   ])
 
-  const capabilities = buildCapabilities(redis, blob)
+  const capabilities = buildCapabilities(redis)
 
   return NextResponse.json({
     checkedAt: new Date().toISOString(),
@@ -170,11 +170,8 @@ async function checkBlobStatus(): Promise<ServiceStatus> {
   }
 }
 
-function buildCapabilities(redis: ServiceStatus, blob: ServiceStatus): ServiceStatus[] {
+function buildCapabilities(redis: ServiceStatus): ServiceStatus[] {
   const redisReady = redis.status === 'available'
-  const blobReady = blob.status === 'available'
-  const autoIconTarget = blob.configured ? 'Vercel Blob' : 'Redis/KV 资源接口'
-  const autoIconStatus = blob.configured ? blob.status : redis.status
 
   return [
     {
@@ -194,26 +191,6 @@ function buildCapabilities(redis: ServiceStatus, blob: ServiceStatus): ServiceSt
       target: 'Redis/KV List',
       details: redisReady ? `默认保留最近 ${DATA_HISTORY_LIMIT} 个版本。` : '历史版本依赖 Redis/KV，当前不可完整使用。',
       action: redisReady ? '无需处理。' : redis.action,
-    },
-    {
-      id: 'resources',
-      title: '图片资源库',
-      status: blobReady ? 'available' : blob.status,
-      configured: blob.configured,
-      target: 'Vercel Blob',
-      details: blobReady ? '图片资源上传、列出和删除可用。' : '图片资源库写入依赖 Vercel Blob，当前不可完整使用。',
-      action: blobReady ? '无需处理。' : blob.action,
-    },
-    {
-      id: 'favicon-cache',
-      title: '自动缓存图标',
-      status: autoIconStatus,
-      configured: blob.configured || redis.configured,
-      target: autoIconTarget,
-      details: blob.configured
-        ? '已配置 Blob，自动缓存图标会写入 Vercel Blob，并使用 Redis/KV 记录域名缓存索引。'
-        : '未配置 Blob，自动缓存图标会尝试写入 Redis/KV 资源接口。',
-      action: autoIconStatus === 'available' ? '无需处理。' : '检查图标写入目标对应的存储配置。',
     },
   ]
 }
