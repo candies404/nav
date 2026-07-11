@@ -8,13 +8,11 @@ import { getContentRevision } from '@/lib/content-revision'
 interface NavigationContentProps {
   navigationData: NavigationData
   siteData: SiteConfig
-  searchScope?: 'public' | 'private'
 }
 
 export function NavigationContent({
   navigationData,
   siteData,
-  searchScope = 'public',
 }: NavigationContentProps) {
   const navigationOutline: NavigationData = {
     navigationItems: navigationData.navigationItems.map(category => ({
@@ -34,7 +32,6 @@ export function NavigationContent({
       navigationOutline={navigationOutline}
       siteData={siteData}
       searchRevision={getContentRevision(navigationData)}
-      searchScope={searchScope}
     >
       <div className="px-2 py-3 sm:px-4 sm:py-5 lg:px-6 lg:py-6">
         <div className="space-y-5 sm:space-y-6">

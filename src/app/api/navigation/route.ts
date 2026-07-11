@@ -104,39 +104,34 @@ export async function POST(request: Request) {
     }
 
     const input = await request.json()
-    if (input?.item && typeof input.item === 'object') {
-      const item = input.item as NavigationItem
-      if (!item.id || !item.title) {
-        return NextResponse.json(
-          { error: 'Invalid navigation item' },
-          { status: 400 }
-        )
-      }
-
-      const currentData = await getFileContent(
-        'src/navsphere/content/navigation.json',
-        { bypassCache: true }
-      ) as NavigationData
-      const nextItem: NavigationItem = {
-        id: item.id,
-        title: item.title,
-        description: item.description || '',
-        icon: item.icon,
-        enabled: item.enabled ?? true,
-        items: [],
-        subCategories: [],
-      }
-      const result = await saveNavigationData(
-        { navigationItems: [...(currentData.navigationItems || []), nextItem] },
-        'Add navigation item'
+    const item = input?.item as Partial<NavigationItem> | undefined
+    if (!item || typeof item !== 'object' || !item.id || !item.title) {
+      return NextResponse.json(
+        { error: 'Invalid navigation item' },
+        { status: 400 }
       )
-
-      return NextResponse.json({ success: true, item: nextItem, ...result })
     }
 
-    const result = await validateAndSaveNavigationData(input)
+    const currentData = await getFileContent(
+      'src/navsphere/content/navigation.json',
+      { bypassCache: true }
+    ) as NavigationData
+    const nextItem: NavigationItem = {
+      id: item.id,
+      title: item.title,
+      description: item.description || '',
+      icon: item.icon,
+      enabled: item.enabled ?? true,
+      items: [],
+      subCategories: [],
+    }
+    const result = await saveNavigationData(
+      { navigationItems: [...(currentData.navigationItems || []), nextItem] },
+      'Add navigation item',
+      { previousData: currentData }
+    )
 
-    return NextResponse.json({ success: true, ...result })
+    return NextResponse.json({ success: true, item: nextItem, ...result })
   } catch (error) {
     console.error('Failed to save navigation data:', error)
     return NextResponse.json(

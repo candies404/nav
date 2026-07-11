@@ -37,6 +37,7 @@ type SiteRecord = {
 
 type SaveNavigationDataOptions = {
   recordHistory?: boolean
+  previousData?: NavigationData
 }
 
 type SaveNavigationDataResult = {
@@ -49,10 +50,10 @@ export async function saveNavigationData(
   message = 'Update navigation data',
   options: SaveNavigationDataOptions = {}
 ): Promise<SaveNavigationDataResult> {
-  const previousData = await getFileContent(
+  const previousData = (options.previousData ?? await getFileContent(
     NAVIGATION_PATH,
     { bypassCache: true }
-  ) as NavigationData
+  )) as NavigationData
   const previousContent = stringifyNavigationData(previousData)
   const nextContent = stringifyNavigationData(data)
   let historyRecorded = false
@@ -172,11 +173,24 @@ function stringifyNavigationData(data: NavigationData) {
   return JSON.stringify(data, null, 2)
 }
 
+export function cloneNavigationData(data: NavigationData): NavigationData {
+  return JSON.parse(JSON.stringify(data)) as NavigationData
+}
+
 async function cleanupRemovedSiteFavicons(previousData: NavigationData, nextData: NavigationData) {
+  const previousSites = collectSites(previousData)
   const nextSiteIds = new Set(collectSites(nextData).map(site => site.id))
   const retainedIcons = collectReferencedIcons(nextData)
+  const removedSites = previousSites.filter(site => !nextSiteIds.has(site.id))
+  if (removedSites.length === 0) return
+
+  const removedIconCandidates = removedSites.filter(site => {
+    const icon = site.icon?.trim()
+    return icon && !retainedIcons.has(icon)
+  })
+  if (removedIconCandidates.length === 0) return
+
   const historyIcons = await collectHistoryReferencedIcons()
-  const removedSites = collectSites(previousData).filter(site => !nextSiteIds.has(site.id))
   const blobTargets = new Set<string>()
   const storedAssetIds = new Set<string>()
   const faviconCacheDeletes = new Map<string, string | undefined>()
@@ -185,7 +199,7 @@ async function cleanupRemovedSiteFavicons(previousData: NavigationData, nextData
     retainedIcons.add(icon)
   }
 
-  for (const site of removedSites) {
+  for (const site of removedIconCandidates) {
     const icon = site.icon?.trim()
     if (!icon || retainedIcons.has(icon)) continue
 

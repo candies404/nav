@@ -5,20 +5,13 @@ import { useState, useRef, useEffect, type KeyboardEvent as ReactKeyboardEvent }
 import { Input } from '@/registry/new-york/ui/input'
 import { ExternalLink, Search, X } from 'lucide-react'
 import { Button } from '@/registry/new-york/ui/button'
-import type { NavigationItem, NavigationSubItem } from '@/types/navigation'
+import type { NavigationSearchIndexItem } from '@/types/navigation'
 import type { SiteConfig } from '@/types/site'
 import { getNavigationItemElementId } from '@/lib/navigation-anchor'
 
 interface SearchBarProps {
   onSearch: (query: string) => void
-  searchResults: Array<{
-    category: NavigationItem
-    items: (NavigationItem | NavigationSubItem)[]
-    subCategories: Array<{
-      title: string
-      items: (NavigationItem | NavigationSubItem)[]
-    }>
-  }>
+  searchResults: NavigationSearchIndexItem[]
   searchQuery: string
   siteConfig?: SiteConfig
   isLoading?: boolean
@@ -27,10 +20,10 @@ interface SearchBarProps {
 }
 
 interface SearchResultItemProps {
-  item: NavigationItem | NavigationSubItem
+  item: NavigationSearchIndexItem
   searchQuery: string
-  onSelect: (item: NavigationItem | NavigationSubItem) => void
-  onOpen: (item: NavigationItem | NavigationSubItem) => void
+  onSelect: (item: NavigationSearchIndexItem) => void
+  onOpen: (item: NavigationSearchIndexItem) => void
 }
 
 function SearchResultItem({ item, searchQuery, onSelect, onOpen }: SearchResultItemProps) {
@@ -79,6 +72,11 @@ function SearchResultItem({ item, searchQuery, onSelect, onOpen }: SearchResultI
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="text-sm font-medium">{highlightText(item.title)}</span>
+        {item.categoryPath.length > 0 && (
+          <span className="line-clamp-1 text-[11px] text-muted-foreground/80">
+            {highlightText(item.categoryPath.join(' / '))}
+          </span>
+        )}
         {item.description && (
           <span className="line-clamp-1 text-xs text-muted-foreground">
             {highlightText(item.description)}
@@ -153,7 +151,7 @@ export function SearchBar({
     setIsFocused(true)
   }
 
-  const handleItemSelect = (item: NavigationItem | NavigationSubItem) => {
+  const handleItemSelect = (item: NavigationSearchIndexItem) => {
     const element = document.getElementById(getNavigationItemElementId(item.id))
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -162,14 +160,13 @@ export function SearchBar({
     setIsFocused(false)
   }
 
-  const openItemLink = (item: NavigationItem | NavigationSubItem) => {
-    const itemWithHref = item as NavigationSubItem
-    if (itemWithHref.href) {
+  const openItemLink = (item: NavigationSearchIndexItem) => {
+    if (item.href) {
       const linkTarget = siteConfig?.navigation?.linkTarget || '_blank'
       if (linkTarget === '_self') {
-        window.location.href = itemWithHref.href
+        window.location.href = item.href
       } else {
-        window.open(itemWithHref.href, linkTarget)
+        window.open(item.href, linkTarget)
       }
     }
   }
@@ -244,37 +241,14 @@ export function SearchBar({
                   </div>
                 </div>
               ) : (
-                searchResults.map((result) => (
-                  <div key={result.category.id} role="group" aria-label={result.category.title}>
-                    <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                      {result.category.title}
-                    </div>
-                    {result.items.map((item) => (
-                      <SearchResultItem
-                        key={item.id}
-                        item={item}
-                        searchQuery={searchQuery}
-                        onSelect={handleItemSelect}
-                        onOpen={openItemLink}
-                      />
-                    ))}
-                    {result.subCategories.map((sub) => (
-                      <div key={sub.title}>
-                        <div className="px-3 py-2 text-xs font-medium text-muted-foreground bg-muted/30 border-b">
-                          {result.category.title} / {sub.title}
-                        </div>
-                        {sub.items.map((item) => (
-                          <SearchResultItem
-                            key={item.id}
-                            item={item}
-                            searchQuery={searchQuery}
-                            onSelect={handleItemSelect}
-                            onOpen={openItemLink}
-                          />
-                        ))}
-                      </div>
-                    ))}
-                  </div>
+                searchResults.map((item) => (
+                  <SearchResultItem
+                    key={item.id}
+                    item={item}
+                    searchQuery={searchQuery}
+                    onSelect={handleItemSelect}
+                    onOpen={openItemLink}
+                  />
                 ))
               )}
           </div>

@@ -61,7 +61,9 @@ export async function addNavigationSite(input: AddSiteInput) {
   }
 
   getTargetItems(updatedData, target).push(item)
-  const result = await saveNavigationData(updatedData, `Add site: ${item.id}`)
+  const result = await saveNavigationData(updatedData, `Add site: ${item.id}`, {
+    previousData: data,
+  })
 
   return {
     item,
@@ -108,7 +110,9 @@ export async function updateNavigationSite(
     getTargetItems(updatedData, target).push(updatedItem)
   }
 
-  const result = await saveNavigationData(updatedData, `Update site: ${siteId}`)
+  const result = await saveNavigationData(updatedData, `Update site: ${siteId}`, {
+    previousData: data,
+  })
   return {
     item: updatedItem,
     moved: !staysInSameLocation,
@@ -130,7 +134,8 @@ export async function deleteNavigationSites(siteIds: string[]) {
 
   const result = await saveNavigationData(
     updatedData,
-    `Delete ${deletedIds.length} site(s)`
+    `Delete ${deletedIds.length} site(s)`,
+    { previousData: data }
   )
   return { deletedIds, deletedCount: deletedIds.length, ...result }
 }
@@ -174,7 +179,8 @@ export async function batchUpdateNavigationSites(input: {
     getTargetItems(updatedData, target).push(...movedItems)
     const result = await saveNavigationData(
       updatedData,
-      `Move ${movedItems.length} site(s)`
+      `Move ${movedItems.length} site(s)`,
+      { previousData: data }
     )
     return {
       updatedIds: movedItems.map(item => item.id),
@@ -208,7 +214,8 @@ export async function batchUpdateNavigationSites(input: {
 
   const result = await saveNavigationData(
     updatedData,
-    `Batch ${input.operation}: ${updatedIds.length} site(s)`
+    `Batch ${input.operation}: ${updatedIds.length} site(s)`,
+    { previousData: data }
   )
   return { updatedIds, updatedCount: updatedIds.length, ...result }
 }
@@ -251,7 +258,8 @@ export async function reorderNavigationSites(input: {
   setTargetItems(updatedData, target, reorderedItems)
   const result = await saveNavigationData(
     updatedData,
-    `Reorder ${orderedIds.length} site(s)`
+    `Reorder ${orderedIds.length} site(s)`,
+    { previousData: data }
   )
 
   return { orderedSiteIds: orderedIds, ...result }

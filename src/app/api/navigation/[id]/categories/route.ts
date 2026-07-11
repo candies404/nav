@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { getFileContent, getStorageErrorMessage } from '@/lib/storage'
-import { saveNavigationData } from '@/lib/navigation-storage'
+import { cloneNavigationData, saveNavigationData } from '@/lib/navigation-storage'
 import type { NavigationCategory, NavigationData } from '@/types/navigation'
 
 export const runtime = 'edge'
@@ -46,6 +46,7 @@ export async function POST(
     }
 
     const data = await loadNavigationData()
+    const previousData = cloneNavigationData(data)
     const navigation = data.navigationItems.find(nav => nav.id === id)
     if (!navigation) {
       return NextResponse.json({ error: 'Navigation not found' }, { status: 404 })
@@ -61,7 +62,9 @@ export async function POST(
     }
 
     navigation.subCategories = [...(navigation.subCategories || []), category]
-    await saveNavigationData(data, `Add category: ${category.id}`)
+    await saveNavigationData(data, `Add category: ${category.id}`, {
+      previousData,
+    })
 
     return NextResponse.json({
       success: true,
@@ -91,6 +94,7 @@ export async function PATCH(
     }
 
     const data = await loadNavigationData()
+    const previousData = cloneNavigationData(data)
     const navigation = data.navigationItems.find(nav => nav.id === id)
     if (!navigation) {
       return NextResponse.json({ error: 'Navigation not found' }, { status: 404 })
@@ -111,7 +115,9 @@ export async function PATCH(
     if (input.description !== undefined) category.description = input.description
     if (input.enabled !== undefined) category.enabled = input.enabled
 
-    await saveNavigationData(data, `Update category: ${category.id}`)
+    await saveNavigationData(data, `Update category: ${category.id}`, {
+      previousData,
+    })
 
     return NextResponse.json({
       success: true,
@@ -141,6 +147,7 @@ export async function PUT(
     }
 
     const data = await loadNavigationData()
+    const previousData = cloneNavigationData(data)
     const navigation = data.navigationItems.find(nav => nav.id === id)
     if (!navigation) {
       return NextResponse.json({ error: 'Navigation not found' }, { status: 404 })
@@ -162,7 +169,9 @@ export async function PUT(
 
     const categoryById = new Map(currentCategories.map(category => [category.id, category]))
     navigation.subCategories = orderedCategoryIds.map(categoryId => categoryById.get(categoryId)!)
-    await saveNavigationData(data, `Reorder categories: ${id}`)
+    await saveNavigationData(data, `Reorder categories: ${id}`, {
+      previousData,
+    })
 
     return NextResponse.json({
       success: true,
@@ -216,7 +225,11 @@ export async function DELETE(
       return nav
     })
 
-    await saveNavigationData({ navigationItems: updatedNavigations }, `Delete category: ${categoryId}`)
+    await saveNavigationData(
+      { navigationItems: updatedNavigations },
+      `Delete category: ${categoryId}`,
+      { previousData: data }
+    )
 
     const updatedNavigation = updatedNavigations.find(nav => nav.id === id)
     return NextResponse.json({

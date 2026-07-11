@@ -62,7 +62,8 @@ export async function PUT(
 
     await saveNavigationData(
       { navigationItems: updatedItems },
-      'Update navigation item from extension'
+      'Update navigation item from extension',
+      { previousData: data }
     )
 
     return NextResponse.json(mergedItem)

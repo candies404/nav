@@ -6,28 +6,6 @@ import type { NavigationData, NavigationItem } from '@/types/navigation'
 
 export const runtime = 'edge'
 
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await params
-    const data = await getFileContent(
-      'src/navsphere/content/navigation.json',
-      { bypassCache: true }
-    ) as NavigationData
-    const item = data.navigationItems.find(item => item.id === id)
-
-    if (!item) {
-      return new Response('Not Found', { status: 404 })
-    }
-
-    return NextResponse.json(item)
-  } catch {
-    return NextResponse.json({ error: 'Failed to fetch navigation item' }, { status: 500 })
-  }
-}
-
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -64,7 +42,11 @@ export async function PUT(
       item.id === id ? mergedItem : item
     )
 
-    await saveNavigationData({ navigationItems: updatedItems }, 'Update navigation item')
+    await saveNavigationData(
+      { navigationItems: updatedItems },
+      'Update navigation item',
+      { previousData: data }
+    )
 
     return NextResponse.json(mergedItem)
   } catch (error) {
@@ -90,7 +72,11 @@ export async function DELETE(
     ) as NavigationData
     const updatedItems = data.navigationItems.filter(item => item.id !== id)
 
-    await saveNavigationData({ navigationItems: updatedItems }, 'Delete navigation item')
+    await saveNavigationData(
+      { navigationItems: updatedItems },
+      'Delete navigation item',
+      { previousData: data }
+    )
 
     return NextResponse.json({ success: true })
   } catch (error) {

@@ -67,6 +67,19 @@ export interface NavigationData {
   navigationItems: NavigationItem[]
 }
 
+export interface NavigationSearchIndexItem {
+  id: string
+  title: string
+  href: string
+  description?: string
+  icon?: string
+  categoryPath: string[]
+}
+
+export interface NavigationSearchIndex {
+  items: NavigationSearchIndexItem[]
+}
+
 export interface ResourceItem {
   title: string
   description: string

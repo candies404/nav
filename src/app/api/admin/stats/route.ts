@@ -1,48 +1,50 @@
 import { NextResponse } from 'next/server'
 import { getFileContent } from '@/lib/storage'
-import { NavigationCategory, NavigationItem, NavigationData } from '@/types/navigation'
+import { auth } from '@/lib/auth'
+import type { NavigationData } from '@/types/navigation'
+
 export const runtime = 'edge'
 
-export async function GET() {
+type AdminStats = {
+  parentCategories: number
+  subCategories: number
+  totalCategories: number
+  totalSites: number
+}
+
+const STATS_CACHE_TTL_MS = Number(process.env.NAVSPHERE_ADMIN_STATS_CACHE_TTL_MS || 10_000)
+const globalStatsCache = globalThis as typeof globalThis & {
+  __navsphereAdminStatsCache?: {
+    value: AdminStats
+    expiresAt: number
+  }
+}
+
+export async function GET(request: Request) {
   try {
-    // 动态读取最新的导航数据，而不是静态导入
-    const navigationData = await getFileContent('src/navsphere/content/navigation.json') as NavigationData
-    const navigationItems = navigationData.navigationItems || []
-
-    // 计算一级分类数量
-    const parentCategories = navigationItems.length
-
-    // 计算二级分类数量
-    const subCategories = navigationItems.reduce((total: number, category: NavigationItem) => {
-      return total + (category.subCategories?.length || 0)
-    }, 0)
-
-    // 计算总分类数量
-    const totalCategories = parentCategories + subCategories
-
-    // 计算站点总数
-    const totalSites = navigationItems.reduce((total: number, category: NavigationItem) => {
-      // 一级分类的站点
-      const parentSites = category.items?.length || 0
-
-      // 二级分类的站点
-      const subCategoriesSites = Array.isArray(category.subCategories)
-        ? (category.subCategories as NavigationCategory[]).reduce((sum, subCategory) => {
-          return sum + (subCategory.items?.length || 0);
-        }, 0)
-        : 0;
-
-      return total + parentSites + subCategoriesSites
-    }, 0)
-
-    const result = {
-      parentCategories,
-      subCategories,
-      totalCategories,
-      totalSites
+    const session = await auth()
+    if (!session?.user) {
+      return new Response('Unauthorized', { status: 401 })
     }
 
-    return NextResponse.json(result)
+    const { searchParams } = new URL(request.url)
+    const forceFresh = searchParams.get('fresh') === '1'
+    const cachedStats = globalStatsCache.__navsphereAdminStatsCache
+    if (!forceFresh && cachedStats && cachedStats.expiresAt > Date.now()) {
+      return statsResponse(cachedStats.value)
+    }
+
+    const navigationData = await getFileContent(
+      'src/navsphere/content/navigation.json',
+      { bypassCache: forceFresh }
+    ) as NavigationData
+    const result = getAdminStats(navigationData)
+    globalStatsCache.__navsphereAdminStatsCache = {
+      value: result,
+      expiresAt: Date.now() + STATS_CACHE_TTL_MS,
+    }
+
+    return statsResponse(result)
   } catch (error) {
     console.error('Failed to fetch stats:', error)
     return NextResponse.json(
@@ -50,4 +52,35 @@ export async function GET() {
       { status: 500 }
     )
   }
-} 
+}
+
+function statsResponse(stats: AdminStats) {
+  return NextResponse.json(stats, {
+    headers: {
+      'Cache-Control': 'private, no-store',
+      'Vary': 'Cookie',
+    },
+  })
+}
+
+function getAdminStats(data: NavigationData): AdminStats {
+  let subCategories = 0
+  let totalSites = 0
+  const parentCategories = data.navigationItems?.length || 0
+
+  for (const category of data.navigationItems || []) {
+    totalSites += category.items?.length || 0
+
+    for (const subCategory of category.subCategories || []) {
+      subCategories += 1
+      totalSites += subCategory.items?.length || 0
+    }
+  }
+
+  return {
+    parentCategories,
+    subCategories,
+    totalCategories: parentCategories + subCategories,
+    totalSites,
+  }
+}

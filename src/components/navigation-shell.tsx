@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { Github, Menu } from 'lucide-react'
-import type { NavigationData, NavigationItem, NavigationSubItem } from '@/types/navigation'
+import type { NavigationData, NavigationSearchIndex, NavigationSearchIndexItem } from '@/types/navigation'
 import type { SiteConfig } from '@/types/site'
 import { Sidebar } from '@/components/sidebar'
 import { SearchBar } from '@/components/search-bar'
@@ -15,7 +15,6 @@ interface NavigationShellProps {
   navigationOutline: NavigationData
   siteData: SiteConfig
   searchRevision: string
-  searchScope: 'public' | 'private'
   children: ReactNode
 }
 
@@ -23,12 +22,11 @@ export function NavigationShell({
   navigationOutline,
   siteData,
   searchRevision,
-  searchScope,
   children,
 }: NavigationShellProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
-  const [searchData, setSearchData] = useState<NavigationData | null>(null)
+  const [searchData, setSearchData] = useState<NavigationSearchIndex | null>(null)
   const [isSearchLoading, setIsSearchLoading] = useState(false)
   const [searchError, setSearchError] = useState(false)
   const searchRequestRef = useRef<Promise<void> | null>(null)
@@ -39,17 +37,14 @@ export function NavigationShell({
     setIsSearchLoading(true)
     setSearchError(false)
 
-    const searchParams = new URLSearchParams({
-      scope: searchScope,
-      v: searchRevision,
-    })
+    const searchParams = new URLSearchParams({ v: searchRevision })
     const request = fetch(`/api/home/navigation?${searchParams}`)
       .then(async response => {
         if (!response.ok) {
           throw new Error(`Failed to load navigation search data: ${response.status}`)
         }
 
-        setSearchData(await response.json() as NavigationData)
+        setSearchData(await response.json() as NavigationSearchIndex)
       })
       .catch(error => {
         console.error('Failed to load navigation search data:', error)
@@ -61,60 +56,17 @@ export function NavigationShell({
       })
 
     searchRequestRef.current = request
-  }, [searchData, searchRevision, searchScope])
+  }, [searchData, searchRevision])
 
   const searchResults = useMemo(() => {
     const query = searchQuery.toLowerCase().trim()
     if (!query || !searchData) return []
 
-    const results: Array<{
-      category: NavigationItem
-      items: (NavigationItem | NavigationSubItem)[]
-      subCategories: Array<{
-        title: string
-        items: (NavigationItem | NavigationSubItem)[]
-      }>
-    }> = []
-
-    searchData.navigationItems.forEach(category => {
-      const items = (category.items || []).filter(item => {
-        if (item.enabled === false) return false
-        return item.title.toLowerCase().includes(query) ||
-          item.description?.toLowerCase().includes(query)
-      })
-
-      const subCategories: Array<{
-        title: string
-        items: (NavigationItem | NavigationSubItem)[]
-      }> = []
-
-      category.subCategories?.forEach(subCategory => {
-        if (subCategory.enabled === false) return
-
-        const subItems = (subCategory.items || []).filter(item => {
-          if (item.enabled === false) return false
-          return item.title.toLowerCase().includes(query) ||
-            item.description?.toLowerCase().includes(query)
-        })
-
-        if (subItems.length > 0) {
-          subCategories.push({
-            title: subCategory.title,
-            items: subItems,
-          })
-        }
-      })
-
-      if (items.length > 0 || subCategories.length > 0) {
-        results.push({
-          category,
-          items,
-          subCategories,
-        })
-      }
-    })
-
-    return results
+    return searchData.items.filter((item: NavigationSearchIndexItem) =>
+      item.title.toLowerCase().includes(query) ||
+      item.description?.toLowerCase().includes(query) ||
+      item.categoryPath.some(path => path.toLowerCase().includes(query))
+    )
   }, [searchData, searchQuery])
 
   return (

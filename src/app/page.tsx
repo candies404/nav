@@ -29,7 +29,6 @@ export default async function HomePage() {
       <NavigationContent
         navigationData={navigationData}
         siteData={siteData}
-        searchScope={includePrivate ? 'private' : 'public'}
       />
       <ScrollToTop />
     </Container>
