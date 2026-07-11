@@ -1,7 +1,7 @@
 'use client'
 export const runtime = 'edge'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
 import { NavigationItem, NavigationCategory, NavigationSubItem } from '@/types/navigation'
 import { Button } from "@/components/ui/button"
@@ -79,6 +79,38 @@ type SiteSnapshot = {
   title: string
   href: string
   path: string
+  description: string
+  icon: string
+  enabled: boolean
+  isPrivate: boolean
+}
+
+type SiteFieldChange = {
+  field: string
+  before: string
+  after: string
+}
+
+type SiteMove = {
+  before: SiteSnapshot
+  after: SiteSnapshot
+}
+
+type SiteChange = {
+  before: SiteSnapshot
+  after: SiteSnapshot
+  changes: SiteFieldChange[]
+}
+
+type NavigationDataDiff = {
+  currentStats: NavigationDataStats
+  targetStats: NavigationDataStats
+  deletedSites: SiteSnapshot[]
+  addedSites: SiteSnapshot[]
+  movedSites: SiteMove[]
+  changedSites: SiteChange[]
+  categoryDrop: number
+  deletedRatio: number
 }
 
 function getNavigationDataStats(jsonString: string): NavigationDataStats {
@@ -116,11 +148,19 @@ function collectNavigationSites(navigationItems: NavigationItem[]) {
 function getSiteSnapshots(jsonString: string): SiteSnapshot[] {
   const parsed = JSON.parse(jsonString) as { navigationItems?: NavigationItem[] }
 
-  return collectNavigationSites(parsed.navigationItems || []).map((site) => ({
+  return getSiteSnapshotsFromData(parsed)
+}
+
+function getSiteSnapshotsFromData(data: { navigationItems?: NavigationItem[] }): SiteSnapshot[] {
+  return collectNavigationSites(data.navigationItems || []).map((site) => ({
     key: site.id || site.href,
     title: site.title || site.href,
     href: site.href,
     path: site.path,
+    description: site.description || '',
+    icon: site.icon || '',
+    enabled: site.enabled !== false,
+    isPrivate: site.isPrivate === true,
   }))
 }
 
@@ -149,6 +189,356 @@ function formatStatsSummary(previous: NavigationDataStats | null, current: Navig
     `禁用站点：${previous.disabledItems} -> ${current.disabledItems} (${formatStatDelta(previous.disabledItems, current.disabledItems)})`,
     `大小：${(previous.size / 1024).toFixed(2)} KB -> ${(current.size / 1024).toFixed(2)} KB (${formatStatDelta(Number((previous.size / 1024).toFixed(2)), Number((current.size / 1024).toFixed(2)))} KB)`,
   ].join('\n')
+}
+
+function getNavigationStatsFromData(data: { navigationItems?: NavigationItem[] }): NavigationDataStats {
+  const jsonString = JSON.stringify(data)
+  const sites = collectNavigationSites(data.navigationItems || [])
+
+  return {
+    categories: data.navigationItems?.length || 0,
+    items: sites.length,
+    privateItems: sites.filter(site => site.isPrivate).length,
+    disabledItems: sites.filter(site => site.enabled === false).length,
+    size: new Blob([jsonString]).size,
+  }
+}
+
+function mapSitesByKey(sites: SiteSnapshot[]) {
+  return new Map(sites.map(site => [site.key, site]))
+}
+
+function formatBoolean(value: boolean) {
+  return value ? '是' : '否'
+}
+
+function formatSiteFieldValue(value: string | boolean) {
+  if (typeof value === 'boolean') return formatBoolean(value)
+  return value || '未设置'
+}
+
+function getSiteFieldChanges(current: SiteSnapshot, target: SiteSnapshot): SiteFieldChange[] {
+  const fields: Array<{
+    key: keyof Pick<SiteSnapshot, 'title' | 'href' | 'description' | 'icon' | 'enabled' | 'isPrivate'>
+    label: string
+  }> = [
+    { key: 'title', label: '标题' },
+    { key: 'href', label: '链接' },
+    { key: 'description', label: '描述' },
+    { key: 'icon', label: '图标' },
+    { key: 'enabled', label: '启用状态' },
+    { key: 'isPrivate', label: '私有状态' },
+  ]
+
+  return fields.flatMap(({ key, label }) => {
+    if (current[key] === target[key]) return []
+
+    return [{
+      field: label,
+      before: formatSiteFieldValue(current[key]),
+      after: formatSiteFieldValue(target[key]),
+    }]
+  })
+}
+
+function getNavigationDataDiff(
+  currentData: { navigationItems?: NavigationItem[] },
+  targetData: { navigationItems?: NavigationItem[] }
+): NavigationDataDiff {
+  const currentStats = getNavigationStatsFromData(currentData)
+  const targetStats = getNavigationStatsFromData(targetData)
+  const currentSites = getSiteSnapshotsFromData(currentData)
+  const targetSites = getSiteSnapshotsFromData(targetData)
+  const currentSiteMap = mapSitesByKey(currentSites)
+  const targetSiteMap = mapSitesByKey(targetSites)
+  const deletedSites = currentSites.filter(site => !targetSiteMap.has(site.key))
+  const addedSites = targetSites.filter(site => !currentSiteMap.has(site.key))
+  const movedSites: SiteMove[] = []
+  const changedSites: SiteChange[] = []
+
+  for (const currentSite of currentSites) {
+    const targetSite = targetSiteMap.get(currentSite.key)
+    if (!targetSite) continue
+
+    if (currentSite.path !== targetSite.path) {
+      movedSites.push({ before: currentSite, after: targetSite })
+    }
+
+    const changes = getSiteFieldChanges(currentSite, targetSite)
+    if (changes.length > 0) {
+      changedSites.push({
+        before: currentSite,
+        after: targetSite,
+        changes,
+      })
+    }
+  }
+
+  return {
+    currentStats,
+    targetStats,
+    deletedSites,
+    addedSites,
+    movedSites,
+    changedSites,
+    categoryDrop: Math.max(0, currentStats.categories - targetStats.categories),
+    deletedRatio: currentStats.items > 0 ? deletedSites.length / currentStats.items : 0,
+  }
+}
+
+function formatSiteLine(site: SiteSnapshot) {
+  return `- ${site.title}（${site.path}）${site.href ? `\n  ${site.href}` : ''}`
+}
+
+function formatDiffSiteList(sites: SiteSnapshot[], limit = 8) {
+  const preview = sites.slice(0, limit).map(formatSiteLine)
+  if (sites.length > limit) {
+    preview.push(`- 另有 ${sites.length - limit} 个站点未展示`)
+  }
+
+  return preview
+}
+
+function getHistoryRestoreConfirmation(version: NavigationHistoryDetail, diff: NavigationDataDiff) {
+  const hasDeletion = diff.deletedSites.length > 0 || diff.categoryDrop > 0
+  const requiresTypedConfirmation = diff.deletedRatio >= 0.1 || diff.categoryDrop > 0
+  const lines = [
+    '确认恢复到这个历史版本？',
+    '',
+    `历史版本：${new Date(version.createdAt).toLocaleString('zh-CN')}`,
+    version.message ? `版本说明：${version.message}` : '',
+    '',
+    '当前数据会先自动保存为历史版本，然后被选中版本替换。',
+    '',
+    `站点数：${diff.currentStats.items} -> ${diff.targetStats.items} (${formatStatDelta(diff.currentStats.items, diff.targetStats.items)})`,
+    `一级分类：${diff.currentStats.categories} -> ${diff.targetStats.categories} (${formatStatDelta(diff.currentStats.categories, diff.targetStats.categories)})`,
+    `将删除：${diff.deletedSites.length} 个站点`,
+    `将恢复/新增：${diff.addedSites.length} 个站点`,
+    `将移动：${diff.movedSites.length} 个站点`,
+    `将修改：${diff.changedSites.length} 个站点`,
+    ...(hasDeletion ? ['', '恢复后将删除的站点：', ...formatDiffSiteList(diff.deletedSites)] : []),
+  ].filter(Boolean)
+
+  if (requiresTypedConfirmation) {
+    lines.push('', '这是高风险恢复。如需继续，请输入“确认恢复”。')
+  }
+
+  return {
+    text: lines.join('\n'),
+    requiresTypedConfirmation,
+  }
+}
+
+function DiffStatCard({
+  label,
+  value,
+  tone = 'default',
+}: {
+  label: string
+  value: number
+  tone?: 'default' | 'danger' | 'success' | 'warning'
+}) {
+  const toneClass = {
+    default: 'border-border bg-background',
+    danger: 'border-red-200 bg-red-50 text-red-900',
+    success: 'border-green-200 bg-green-50 text-green-900',
+    warning: 'border-amber-200 bg-amber-50 text-amber-900',
+  }[tone]
+
+  return (
+    <div className={`rounded-lg border p-4 ${toneClass}`}>
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="mt-1 text-2xl font-semibold leading-none">{value}</div>
+    </div>
+  )
+}
+
+function SitePreviewList({
+  sites,
+  emptyText,
+  maxItems = 6,
+}: {
+  sites: SiteSnapshot[]
+  emptyText: string
+  maxItems?: number
+}) {
+  if (sites.length === 0) {
+    return <div className="text-xs text-muted-foreground">{emptyText}</div>
+  }
+
+  return (
+    <div className="space-y-2">
+      {sites.slice(0, maxItems).map(site => (
+        <div key={site.key} className="rounded-lg border bg-background p-2.5">
+          <div className="truncate text-sm font-medium">{site.title}</div>
+          <div className="mt-0.5 truncate text-xs text-muted-foreground">{site.path}</div>
+          <div className="mt-0.5 truncate text-xs text-muted-foreground/80">{site.href}</div>
+        </div>
+      ))}
+      {sites.length > maxItems && (
+        <div className="text-xs text-muted-foreground">另有 {sites.length - maxItems} 个站点未展示</div>
+      )}
+    </div>
+  )
+}
+
+function DiffSectionCard({
+  title,
+  count,
+  children,
+  tone = 'default',
+}: {
+  title: string
+  count: number
+  children: ReactNode
+  tone?: 'default' | 'danger' | 'success' | 'warning'
+}) {
+  const toneClass = {
+    default: 'border-border bg-background',
+    danger: 'border-red-200 bg-red-50/70',
+    success: 'border-green-200 bg-green-50/70',
+    warning: 'border-amber-200 bg-amber-50/70',
+  }[tone]
+
+  const badgeVariant = tone === 'danger'
+    ? 'destructive'
+    : 'outline'
+
+  return (
+    <section className={`rounded-lg border p-3 ${toneClass}`}>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="text-sm font-medium">{title}</div>
+        <Badge variant={badgeVariant}>{count}</Badge>
+      </div>
+      {children}
+    </section>
+  )
+}
+
+function HistoryDiffPreview({ diff }: { diff: NavigationDataDiff }) {
+  const hasRisk = diff.deletedSites.length > 0 || diff.categoryDrop > 0
+
+  return (
+    <div className="space-y-4">
+      {hasRisk && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-950">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+            <div className="space-y-1">
+              <div className="font-medium">恢复这个历史版本会移除当前数据中的内容</div>
+              <div className="text-sm text-red-900/80">
+                将删除 {diff.deletedSites.length} 个站点
+                {diff.categoryDrop > 0 ? `，并减少 ${diff.categoryDrop} 个一级分类` : ''}。
+                恢复前请重点检查下方“将删除”列表。
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <DiffStatCard label="将删除" value={diff.deletedSites.length} tone={diff.deletedSites.length > 0 ? 'danger' : 'default'} />
+        <DiffStatCard label="将恢复/新增" value={diff.addedSites.length} tone={diff.addedSites.length > 0 ? 'success' : 'default'} />
+        <DiffStatCard label="将移动" value={diff.movedSites.length} tone={diff.movedSites.length > 0 ? 'warning' : 'default'} />
+        <DiffStatCard label="将修改" value={diff.changedSites.length} tone={diff.changedSites.length > 0 ? 'warning' : 'default'} />
+      </div>
+
+      <div className="rounded-lg border bg-background p-4">
+        <div className="mb-3 text-sm font-medium">恢复影响总览</div>
+        <div className="grid gap-3 text-sm sm:grid-cols-2">
+          <div className="rounded-md bg-muted/50 p-3">
+            <div className="text-xs text-muted-foreground">站点数</div>
+            <div className="mt-1 font-mono">{diff.currentStats.items} → {diff.targetStats.items} ({formatStatDelta(diff.currentStats.items, diff.targetStats.items)})</div>
+          </div>
+          <div className="rounded-md bg-muted/50 p-3">
+            <div className="text-xs text-muted-foreground">一级分类</div>
+            <div className="mt-1 font-mono">{diff.currentStats.categories} → {diff.targetStats.categories} ({formatStatDelta(diff.currentStats.categories, diff.targetStats.categories)})</div>
+          </div>
+          <div className="rounded-md bg-muted/50 p-3">
+            <div className="text-xs text-muted-foreground">私有站点</div>
+            <div className="mt-1 font-mono">{diff.currentStats.privateItems} → {diff.targetStats.privateItems} ({formatStatDelta(diff.currentStats.privateItems, diff.targetStats.privateItems)})</div>
+          </div>
+          <div className="rounded-md bg-muted/50 p-3">
+            <div className="text-xs text-muted-foreground">禁用站点</div>
+            <div className="mt-1 font-mono">{diff.currentStats.disabledItems} → {diff.targetStats.disabledItems} ({formatStatDelta(diff.currentStats.disabledItems, diff.targetStats.disabledItems)})</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 xl:grid-cols-2">
+        <DiffSectionCard
+          title="将删除"
+          count={diff.deletedSites.length}
+          tone={diff.deletedSites.length > 0 ? 'danger' : 'default'}
+        >
+          <SitePreviewList sites={diff.deletedSites} emptyText="没有将删除的站点" />
+        </DiffSectionCard>
+
+        <DiffSectionCard
+          title="将恢复/新增"
+          count={diff.addedSites.length}
+          tone={diff.addedSites.length > 0 ? 'success' : 'default'}
+        >
+          <SitePreviewList sites={diff.addedSites} emptyText="没有将恢复或新增的站点" />
+        </DiffSectionCard>
+
+        <DiffSectionCard
+          title="将移动"
+          count={diff.movedSites.length}
+          tone={diff.movedSites.length > 0 ? 'warning' : 'default'}
+        >
+          {diff.movedSites.length === 0 ? (
+            <div className="text-xs text-muted-foreground">没有路径变化的站点</div>
+          ) : (
+            <div className="space-y-2">
+              {diff.movedSites.slice(0, 6).map(move => (
+                <div key={move.before.key} className="rounded-lg border bg-background p-2.5">
+                  <div className="truncate text-sm font-medium">{move.before.title}</div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    {move.before.path} → {move.after.path}
+                  </div>
+                </div>
+              ))}
+              {diff.movedSites.length > 6 && (
+                <div className="text-xs text-muted-foreground">另有 {diff.movedSites.length - 6} 个站点未展示</div>
+              )}
+            </div>
+          )}
+        </DiffSectionCard>
+
+        <DiffSectionCard
+          title="将修改"
+          count={diff.changedSites.length}
+          tone={diff.changedSites.length > 0 ? 'warning' : 'default'}
+        >
+          {diff.changedSites.length === 0 ? (
+            <div className="text-xs text-muted-foreground">没有字段变化的站点</div>
+          ) : (
+            <div className="space-y-2">
+              {diff.changedSites.slice(0, 6).map(change => (
+                <div key={change.before.key} className="rounded-lg border bg-background p-2.5">
+                  <div className="truncate text-sm font-medium">{change.before.title}</div>
+                  <div className="mt-1 space-y-1 text-xs text-muted-foreground">
+                    {change.changes.slice(0, 3).map(fieldChange => (
+                      <div key={fieldChange.field} className="truncate">
+                        {fieldChange.field}：{fieldChange.before} → {fieldChange.after}
+                      </div>
+                    ))}
+                    {change.changes.length > 3 && (
+                      <div>另有 {change.changes.length - 3} 个字段变化</div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {diff.changedSites.length > 6 && (
+                <div className="text-xs text-muted-foreground">另有 {diff.changedSites.length - 6} 个站点未展示</div>
+              )}
+            </div>
+          )}
+        </DiffSectionCard>
+      </div>
+    </div>
+  )
 }
 
 function getNavigationChangeSummary(previousJson: string, currentJson: string) {
@@ -310,17 +700,21 @@ export default function DataManagementPage() {
     }
   }, [toast, validateJson])
 
+  const loadHistoryVersionDetail = async (versionId: string) => {
+    const response = await fetch(`/api/navigation/history/${encodeURIComponent(versionId)}`)
+    const result = await response.json()
+
+    if (!response.ok) {
+      throw new Error(result.details || result.error || '加载历史版本详情失败')
+    }
+
+    return result.version as NavigationHistoryDetail
+  }
+
   const previewHistoryVersion = async (versionId: string) => {
     setIsLoadingHistory(true)
     try {
-      const response = await fetch(`/api/navigation/history/${encodeURIComponent(versionId)}`)
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.details || result.error || '加载历史版本详情失败')
-      }
-
-      setHistoryPreview(result.version)
+      setHistoryPreview(await loadHistoryVersionDetail(versionId))
     } catch (error) {
       console.error('Preview history error:', error)
       toast({
@@ -334,10 +728,25 @@ export default function DataManagementPage() {
   }
 
   const restoreHistoryVersion = async (versionId: string) => {
-    if (!window.confirm('确认恢复到这个历史版本？当前数据会先自动保存为历史版本，然后被选中版本替换。')) return
-
     setIsRestoringHistory(true)
     try {
+      const version = historyPreview?.id === versionId
+        ? historyPreview
+        : await loadHistoryVersionDetail(versionId)
+      const currentDataSource = savedNavigationData || navigationData
+      const restoreDiff = getNavigationDataDiff(
+        JSON.parse(currentDataSource) as { navigationItems?: NavigationItem[] },
+        version.data
+      )
+      const confirmation = getHistoryRestoreConfirmation(version, restoreDiff)
+
+      if (confirmation.requiresTypedConfirmation) {
+        const input = window.prompt(confirmation.text)
+        if (input !== '确认恢复') return
+      } else if (!window.confirm(confirmation.text)) {
+        return
+      }
+
       const response = await fetch('/api/navigation/history/restore', {
         method: 'POST',
         headers: {
@@ -681,6 +1090,23 @@ export default function DataManagementPage() {
 
   const formatSize = (size: number) => `${(size / 1024).toFixed(2)} KB`
 
+  const historyRestoreDiff = useMemo(() => {
+    if (!historyPreview) return null
+
+    try {
+      const currentDataSource = savedNavigationData || navigationData
+      if (!currentDataSource) return null
+
+      return getNavigationDataDiff(
+        JSON.parse(currentDataSource) as { navigationItems?: NavigationItem[] },
+        historyPreview.data
+      )
+    } catch (error) {
+      console.error('Failed to build history diff:', error)
+      return null
+    }
+  }, [historyPreview, navigationData, savedNavigationData])
+
   useEffect(() => {
     loadNavigationData()
     checkDefaultFile()
@@ -905,7 +1331,7 @@ export default function DataManagementPage() {
                       )}
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="max-w-4xl">
+                  <DialogContent className="max-h-[88vh] max-w-6xl overflow-hidden">
                     <DialogHeader>
                       <DialogTitle className="flex items-center gap-2">
                         <History className="h-5 w-5" />
@@ -921,11 +1347,14 @@ export default function DataManagementPage() {
                         加载历史版本中...
                       </div>
                     ) : historyVersions.length > 0 ? (
-                      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-                        <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
+                      <div className="grid min-h-0 gap-4 lg:grid-cols-[340px_minmax(0,1fr)]">
+                        <div className="max-h-[68vh] space-y-2 overflow-y-auto rounded-lg border bg-muted/20 p-2">
                           {historyVersions.map((version) => (
-                            <div key={version.id} className="rounded-lg border p-3">
-                              <div className="flex items-start justify-between gap-3">
+                            <div
+                              key={version.id}
+                              className={`rounded-lg border bg-background p-3 transition-colors ${historyPreview?.id === version.id ? 'border-primary shadow-sm' : ''}`}
+                            >
+                              <div className="space-y-3">
                                 <div className="min-w-0 space-y-1">
                                   <div className="font-medium">{formatHistoryTime(version.createdAt)}</div>
                                   <div className="truncate text-xs text-muted-foreground" title={version.message}>
@@ -937,7 +1366,7 @@ export default function DataManagementPage() {
                                     <Badge variant="outline">{formatSize(version.size)}</Badge>
                                   </div>
                                 </div>
-                                <div className="flex shrink-0 gap-2">
+                                <div className="grid grid-cols-3 gap-2">
                                   <Button
                                     size="sm"
                                     variant="outline"
@@ -977,24 +1406,51 @@ export default function DataManagementPage() {
                             </div>
                           ))}
                         </div>
-                        <div className="min-h-[240px] rounded-lg border bg-muted/30 p-3">
+                        <div className="max-h-[68vh] min-h-[360px] overflow-y-auto rounded-lg border bg-muted/20 p-4">
                           {historyPreview ? (
-                            <div className="space-y-3">
-                              <div className="flex items-center justify-between gap-3">
-                                <div className="min-w-0">
-                                  <div className="font-medium">{formatHistoryTime(historyPreview.createdAt)}</div>
-                                  <div className="truncate text-xs text-muted-foreground" title={historyPreview.message}>
-                                    {historyPreview.message}
+                            <div className="space-y-4">
+                              <div className="rounded-lg border bg-background p-4">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <div className="text-sm text-muted-foreground">当前预览版本</div>
+                                    <div className="mt-1 text-base font-semibold">{formatHistoryTime(historyPreview.createdAt)}</div>
+                                    <div className="mt-1 truncate text-xs text-muted-foreground" title={historyPreview.message}>
+                                      {historyPreview.message}
+                                    </div>
+                                  </div>
+                                  <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                                    <Badge variant="outline">{historyPreview.siteCount} 站点</Badge>
+                                    {historyRestoreDiff && historyRestoreDiff.deletedSites.length > 0 && (
+                                      <Badge variant="destructive">
+                                        将删除 {historyRestoreDiff.deletedSites.length}
+                                      </Badge>
+                                    )}
                                   </div>
                                 </div>
-                                <Badge variant="outline">{historyPreview.siteCount} 站点</Badge>
                               </div>
-                              <textarea
-                                readOnly
-                                value={JSON.stringify(historyPreview.data, null, 2)}
-                                className="h-[340px] w-full resize-none overflow-auto rounded border bg-background p-3 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                aria-label="历史版本 JSON 预览"
-                              />
+                              <Tabs defaultValue="summary" className="space-y-3">
+                                <TabsList className="grid w-full grid-cols-2 bg-background">
+                                  <TabsTrigger value="summary">变更摘要</TabsTrigger>
+                                  <TabsTrigger value="json">JSON 预览</TabsTrigger>
+                                </TabsList>
+                                <TabsContent value="summary" className="mt-0">
+                                  {historyRestoreDiff ? (
+                                    <HistoryDiffPreview diff={historyRestoreDiff} />
+                                  ) : (
+                                    <div className="flex min-h-[260px] items-center justify-center rounded-md border bg-background text-sm text-muted-foreground">
+                                      无法生成对比摘要，请确认当前数据已加载。
+                                    </div>
+                                  )}
+                                </TabsContent>
+                                <TabsContent value="json" className="mt-0">
+                                  <textarea
+                                    readOnly
+                                    value={JSON.stringify(historyPreview.data, null, 2)}
+                                    className="h-[520px] w-full resize-none overflow-auto rounded border bg-background p-3 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                    aria-label="历史版本 JSON 预览"
+                                  />
+                                </TabsContent>
+                              </Tabs>
                             </div>
                           ) : (
                             <div className="flex h-full min-h-[220px] items-center justify-center text-sm text-muted-foreground">

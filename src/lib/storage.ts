@@ -46,11 +46,14 @@ export type DataHistoryVersion<T = unknown> = {
   metadata?: Record<string, unknown>
 }
 
+export type DataHistorySummary = Omit<DataHistoryVersion<never>, 'data'>
+
 const DATA_PREFIX = process.env.UPSTASH_REDIS_KEY_PREFIX || 'navsphere'
 const DATA_CACHE_TTL_MS = Number(process.env.NAVSPHERE_DATA_CACHE_TTL_MS || 60_000)
 const DATA_ERROR_CACHE_TTL_MS = Number(process.env.NAVSPHERE_DATA_ERROR_CACHE_TTL_MS || 5_000)
 const BLOB_CACHE_MAX_AGE_SECONDS = Number(process.env.NAVSPHERE_BLOB_CACHE_MAX_AGE_SECONDS || 31_536_000)
 const DATA_HISTORY_LIMIT = positiveInteger(process.env.NAVSPHERE_DATA_HISTORY_LIMIT, 10)
+const REDIS_REQUEST_TIMEOUT_MS = positiveInteger(process.env.NAVSPHERE_REDIS_REQUEST_TIMEOUT_MS, 15_000)
 const globalCache = globalThis as typeof globalThis & {
   __navsphereDataCache?: Map<string, DataCacheEntry>
   __navsphereDataInflight?: Map<string, Promise<unknown>>
@@ -92,25 +95,39 @@ function getRedisConfig() {
 // storage layer usable in both Node and Edge runtimes without a TCP client.
 async function redisCommand<T>(command: unknown[]): Promise<T | null> {
   const { url, token } = getRedisConfig()
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(command),
-  })
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), REDIS_REQUEST_TIMEOUT_MS)
 
-  if (!response.ok) {
-    throw new Error(`Redis request failed: ${response.status} ${response.statusText}`)
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(command),
+      signal: controller.signal,
+    })
+
+    if (!response.ok) {
+      throw new Error(`Redis request failed: ${response.status} ${response.statusText}`)
+    }
+
+    const data = await response.json() as RedisResponse<T>
+    if (data.error) {
+      throw new Error(`Redis command failed: ${data.error}`)
+    }
+
+    return data.result ?? null
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Redis request timed out after ${REDIS_REQUEST_TIMEOUT_MS}ms`)
+    }
+
+    throw error
+  } finally {
+    clearTimeout(timeoutId)
   }
-
-  const data = await response.json() as RedisResponse<T>
-  if (data.error) {
-    throw new Error(`Redis command failed: ${data.error}`)
-  }
-
-  return data.result ?? null
 }
 
 function cloneDefault<T>(value: T): T {
@@ -177,6 +194,10 @@ function dataKey(path: string) {
 
 function dataHistoryKey(path: string) {
   return `${DATA_PREFIX}:history:${path.replace(/[\\/]+/g, ':')}`
+}
+
+function dataHistorySummaryKey(path: string) {
+  return `${DATA_PREFIX}:history-summary:${path.replace(/[\\/]+/g, ':')}`
 }
 
 function assetKey(id: string) {
@@ -331,6 +352,39 @@ export async function listDataHistoryVersions<T = unknown>(
   })
 }
 
+export async function listDataHistorySummaries(
+  path: string,
+  limit = DATA_HISTORY_LIMIT
+) {
+  const safeLimit = Math.max(Math.floor(limit), 1)
+  const summaries = await readDataHistorySummaries(path, safeLimit)
+  if (summaries.length >= safeLimit) {
+    return summaries
+  }
+
+  const historyKey = dataHistoryKey(path)
+  const summaryKey = dataHistorySummaryKey(path)
+  const [historyCount, summaryCount] = await Promise.all([
+    redisCommand<number>(['LLEN', historyKey]),
+    redisCommand<number>(['LLEN', summaryKey]),
+  ])
+  const expectedCount = Math.min(historyCount || 0, safeLimit)
+
+  if ((summaryCount || 0) >= expectedCount && expectedCount > 0) {
+    return summaries
+  }
+
+  const versions = await listDataHistoryVersions(path, safeLimit)
+  const rebuiltSummaries = versions.map(toDataHistorySummary)
+  if (rebuiltSummaries.length > 0) {
+    await replaceDataHistorySummaries(path, rebuiltSummaries, safeLimit).catch((error) => {
+      console.warn('Failed to backfill data history summaries:', error)
+    })
+  }
+
+  return rebuiltSummaries
+}
+
 export async function getDataHistoryVersion<T = unknown>(path: string, id: string) {
   const versions = await listDataHistoryVersions<T>(path)
   return versions.find(version => version.id === id) || null
@@ -350,6 +404,9 @@ export async function deleteDataHistoryVersion<T = unknown>(path: string, id: st
   if (!rawVersion) return false
 
   const deletedCount = await redisCommand<number>(['LREM', key, 1, rawVersion])
+  await deleteDataHistorySummary(path, id).catch((error) => {
+    console.warn('Failed to delete data history summary:', error)
+  })
   return Boolean(deletedCount)
 }
 
@@ -360,9 +417,74 @@ export async function pushDataHistoryVersion<T = unknown>(
 ) {
   const safeLimit = Math.max(Math.floor(limit), 1)
   const key = dataHistoryKey(path)
+  const summaryKey = dataHistorySummaryKey(path)
 
   await redisCommand<number>(['LPUSH', key, JSON.stringify(version)])
+  await redisCommand<number>(['LPUSH', summaryKey, JSON.stringify(toDataHistorySummary(version))])
   await redisCommand<string>(['LTRIM', key, 0, safeLimit - 1])
+  await redisCommand<string>(['LTRIM', summaryKey, 0, safeLimit - 1])
+}
+
+async function readDataHistorySummaries(path: string, limit: number) {
+  const rawSummaries = await redisCommand<string[]>([
+    'LRANGE',
+    dataHistorySummaryKey(path),
+    0,
+    limit - 1,
+  ])
+
+  return (rawSummaries || []).flatMap((rawSummary) => {
+    try {
+      return [JSON.parse(rawSummary) as DataHistorySummary]
+    } catch (error) {
+      console.warn('Failed to parse data history summary:', error)
+      return []
+    }
+  })
+}
+
+async function replaceDataHistorySummaries(
+  path: string,
+  summaries: DataHistorySummary[],
+  limit: number
+) {
+  const key = dataHistorySummaryKey(path)
+  await redisCommand<number>(['DEL', key])
+
+  for (let index = summaries.length - 1; index >= 0; index -= 1) {
+    await redisCommand<number>(['LPUSH', key, JSON.stringify(summaries[index])])
+  }
+
+  await redisCommand<string>(['LTRIM', key, 0, limit - 1])
+}
+
+async function deleteDataHistorySummary(path: string, id: string) {
+  const key = dataHistorySummaryKey(path)
+  const rawSummaries = await redisCommand<string[]>(['LRANGE', key, 0, -1])
+  const rawSummary = (rawSummaries || []).find((summary) => {
+    try {
+      return (JSON.parse(summary) as DataHistorySummary).id === id
+    } catch {
+      return false
+    }
+  })
+
+  if (!rawSummary) return false
+
+  const deletedCount = await redisCommand<number>(['LREM', key, 1, rawSummary])
+  return Boolean(deletedCount)
+}
+
+function toDataHistorySummary<T = unknown>(
+  version: DataHistoryVersion<T>
+): DataHistorySummary {
+  return {
+    id: version.id,
+    path: version.path,
+    createdAt: version.createdAt,
+    message: version.message,
+    metadata: version.metadata,
+  }
 }
 
 export async function saveAsset(

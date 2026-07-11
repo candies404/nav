@@ -1,5 +1,6 @@
 import {
   commitFile,
+  DataHistorySummary,
   DataHistoryVersion,
   deleteDataHistoryVersion,
   deleteBlobAssets,
@@ -8,6 +9,7 @@ import {
   getDataHistoryLimit,
   getDataHistoryVersion,
   getFileContent,
+  listDataHistorySummaries,
   listDataHistoryVersions,
   pushDataHistoryVersion,
 } from '@/lib/storage'
@@ -93,8 +95,8 @@ export function getNavigationHistoryLimit() {
 }
 
 export async function listNavigationHistory() {
-  const versions = await listDataHistoryVersions<NavigationData>(NAVIGATION_PATH)
-  return versions.map(toNavigationHistorySummary)
+  const summaries = await listDataHistorySummaries(NAVIGATION_PATH)
+  return summaries.map(toNavigationHistorySummaryFromDataSummary)
 }
 
 export async function getNavigationHistoryDetail(id: string): Promise<NavigationHistoryDetail | null> {
@@ -166,6 +168,19 @@ function toNavigationHistorySummary(
     categoryCount: getNumberMetadata(version, 'categoryCount', categoryCount),
     siteCount: getNumberMetadata(version, 'siteCount', siteCount),
     size: getNumberMetadata(version, 'size', new Blob([content]).size),
+  }
+}
+
+function toNavigationHistorySummaryFromDataSummary(
+  summary: DataHistorySummary
+): NavigationHistorySummary {
+  return {
+    id: summary.id,
+    createdAt: summary.createdAt,
+    message: summary.message,
+    categoryCount: getNumberMetadata(summary, 'categoryCount', 0),
+    siteCount: getNumberMetadata(summary, 'siteCount', 0),
+    size: getNumberMetadata(summary, 'size', 0),
   }
 }
 
@@ -317,7 +332,7 @@ function getNavigationStats(data: NavigationData) {
 }
 
 function getNumberMetadata(
-  version: DataHistoryVersion<NavigationData>,
+  version: { metadata?: Record<string, unknown> },
   key: string,
   fallback: number
 ) {
