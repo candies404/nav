@@ -90,6 +90,14 @@ type SiteLocation = {
 
 type BatchOperation = 'enable' | 'disable' | 'private' | 'public' | 'move' | null
 
+async function readMutationResponse<T>(response: Response, fallbackMessage: string): Promise<T> {
+  const data = await response.json().catch(() => null) as (T & { error?: string }) | null
+  if (!response.ok || !data) {
+    throw new Error(data?.error || fallbackMessage)
+  }
+  return data
+}
+
 export default function SiteListPage() {
   const { toast } = useToast()
   const [sites, setSites] = useState<Site[]>([])
@@ -280,31 +288,85 @@ export default function SiteListPage() {
     return data[location.categoryIndex].items[location.itemIndex]
   }
 
-  const saveNavigationItems = useCallback(async (updatedNavigationData: Category[], failureMessage: string) => {
-    const response = await fetch('/api/navigation', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        navigationItems: updatedNavigationData
-      }),
-    })
+  const applySiteUpdate = useCallback((
+    data: Category[],
+    siteId: string,
+    updatedItem: NavigationSubItem,
+    targetCategoryId: string,
+    targetSubCategoryId?: string | null
+  ) => {
+    const nextData = cloneNavigationData(data)
+    const sourceLocation = findSiteLocation(nextData, siteId)
+    const targetCategoryIndex = nextData.findIndex(category => category.id === targetCategoryId)
+    if (!sourceLocation || targetCategoryIndex < 0) return data
 
-    if (!response.ok) {
-      let message = failureMessage
-      try {
-        const errorData = await response.json()
-        message = errorData.error || errorData.message || failureMessage
-      } catch {
-        // ignore non-json error responses
-      }
-      throw new Error(message)
+    const normalizedTargetSubCategoryId = targetSubCategoryId && targetSubCategoryId !== 'none'
+      ? targetSubCategoryId
+      : undefined
+    const targetSubCategoryIndex = normalizedTargetSubCategoryId
+      ? nextData[targetCategoryIndex].subCategories?.findIndex(
+        subCategory => subCategory.id === normalizedTargetSubCategoryId
+      )
+      : undefined
+    if (
+      normalizedTargetSubCategoryId &&
+      (targetSubCategoryIndex === undefined || targetSubCategoryIndex < 0)
+    ) {
+      return data
     }
 
-    setNavigationData(updatedNavigationData)
-    setSites(extractSites(updatedNavigationData))
-  }, [extractSites])
+    const sourceItems = sourceLocation.subCategoryIndex === undefined
+      ? nextData[sourceLocation.categoryIndex].items
+      : nextData[sourceLocation.categoryIndex]
+        .subCategories![sourceLocation.subCategoryIndex].items
+    const staysInSameLocation =
+      sourceLocation.categoryIndex === targetCategoryIndex &&
+      sourceLocation.subCategoryIndex === targetSubCategoryIndex
+
+    if (staysInSameLocation) {
+      sourceItems[sourceLocation.itemIndex] = updatedItem
+    } else {
+      sourceItems.splice(sourceLocation.itemIndex, 1)
+      const targetItems = targetSubCategoryIndex === undefined
+        ? nextData[targetCategoryIndex].items
+        : nextData[targetCategoryIndex].subCategories![targetSubCategoryIndex].items
+      targetItems.push(updatedItem)
+    }
+
+    return nextData
+  }, [cloneNavigationData, findSiteLocation])
+
+  const removeSitesFromNavigationData = useCallback((data: Category[], siteIds: string[]) => {
+    const selectedIds = new Set(siteIds)
+    return cloneNavigationData(data).map(category => ({
+      ...category,
+      items: category.items.filter(item => !selectedIds.has(item.id)),
+      subCategories: category.subCategories?.map(subCategory => ({
+        ...subCategory,
+        items: subCategory.items.filter(item => !selectedIds.has(item.id)),
+      })),
+    }))
+  }, [cloneNavigationData])
+
+  const addSiteToNavigationData = useCallback((
+    data: Category[],
+    item: NavigationSubItem,
+    categoryId: string,
+    subCategoryId?: string | null
+  ) => {
+    const nextData = cloneNavigationData(data)
+    const category = nextData.find(currentCategory => currentCategory.id === categoryId)
+    if (!category) return data
+
+    if (subCategoryId && subCategoryId !== 'none') {
+      const subCategory = category.subCategories?.find(current => current.id === subCategoryId)
+      if (!subCategory) return data
+      subCategory.items.push(item)
+    } else {
+      category.items.push(item)
+    }
+    return nextData
+  }, [cloneNavigationData])
 
   // 获取站点所属的分类
   const getSiteCategory = (siteId: string): string => {
@@ -488,26 +550,18 @@ export default function SiteListPage() {
         }
       })
 
-      const response = await fetch('/api/navigation', {
-        method: 'POST',
+      const response = await fetch('/api/navigation/sites', {
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          navigationItems: updatedNavigationData
+          categoryId: sortCategoryId,
+          subCategoryId: sortSubCategoryId,
+          orderedSiteIds: sortItems.map(item => item.id),
         }),
       })
-
-      if (!response.ok) {
-        let message = '保存排序失败'
-        try {
-          const errorData = await response.json()
-          message = errorData.error || errorData.message || message
-        } catch {
-          // ignore non-json error responses
-        }
-        throw new Error(message)
-      }
+      await readMutationResponse(response, '保存排序失败')
 
       setNavigationData(updatedNavigationData)
       setSites(extractSites(updatedNavigationData))
@@ -611,25 +665,25 @@ export default function SiteListPage() {
 
     setIsBatchDeleting(true)
     try {
-      const updatedNavigationData = cloneNavigationData(navigationData)
-
-      // Remove all selected sites from the navigation structure
-      for (const siteId of selectedSites) {
-        const location = findSiteLocation(updatedNavigationData, siteId)
-        if (!location) continue
-
-        if (location.subCategoryIndex !== undefined) {
-          updatedNavigationData[location.categoryIndex].subCategories![location.subCategoryIndex].items.splice(location.itemIndex, 1)
-        } else {
-          updatedNavigationData[location.categoryIndex].items.splice(location.itemIndex, 1)
-        }
-      }
-
-      await saveNavigationItems(updatedNavigationData, '批量删除失败')
+      const response = await fetch('/api/navigation/sites', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ operation: 'delete', siteIds: selectedSites }),
+      })
+      const result = await readMutationResponse<{ deletedIds: string[]; deletedCount: number }>(
+        response,
+        '批量删除失败'
+      )
+      const updatedNavigationData = removeSitesFromNavigationData(
+        navigationData,
+        result.deletedIds
+      )
+      setNavigationData(updatedNavigationData)
+      setSites(extractSites(updatedNavigationData))
 
       toast({
         title: "成功",
-        description: `已删除选中的 ${selectedSites.length} 个站点`,
+        description: `已删除选中的 ${result.deletedCount} 个站点`,
       })
 
       setSelectedSites([])
@@ -663,55 +717,33 @@ export default function SiteListPage() {
 
     setIsAddingSubmitting(true)
     try {
-      // Create a copy of navigation data
-      const updatedNavigationData = [...navigationData]
-
-      // Find the target category
-      const categoryIndex = updatedNavigationData.findIndex(cat => cat.id === newSite.categoryId)
-      if (categoryIndex === -1) {
-        throw new Error('Category not found')
-      }
-
-      const newItem: NavigationSubItem = {
-        id: `site_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        title: newSite.name,
-        href: newSite.url,
-        description: newSite.description,
-        icon: newSite.icon,
-        enabled: newSite.enabled,
-        isPrivate: newSite.isPrivate
-      }
-
-      // Add to subcategory if specified, otherwise add to main category
-      if (newSite.subCategoryId) {
-        const subCategoryIndex = updatedNavigationData[categoryIndex].subCategories?.findIndex(
-          sub => sub.id === newSite.subCategoryId
-        )
-        if (subCategoryIndex !== undefined && subCategoryIndex !== -1) {
-          if (!updatedNavigationData[categoryIndex].subCategories![subCategoryIndex].items) {
-            updatedNavigationData[categoryIndex].subCategories![subCategoryIndex].items = []
-          }
-          updatedNavigationData[categoryIndex].subCategories![subCategoryIndex].items.push(newItem)
-        }
-      } else {
-        if (!updatedNavigationData[categoryIndex].items) {
-          updatedNavigationData[categoryIndex].items = []
-        }
-        updatedNavigationData[categoryIndex].items.push(newItem)
-      }
-
-      // Save to API
-      const response = await fetch('/api/navigation', {
+      const response = await fetch('/api/navigation/sites', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          navigationItems: updatedNavigationData
+          title: newSite.name,
+          href: newSite.url,
+          description: newSite.description,
+          icon: newSite.icon,
+          enabled: newSite.enabled,
+          isPrivate: newSite.isPrivate,
+          targetCategoryId: newSite.categoryId,
+          targetSubCategoryId: newSite.subCategoryId || null,
         }),
       })
-
-      if (!response.ok) throw new Error('Failed to save')
+      const result = await readMutationResponse<{
+        item: NavigationSubItem
+        targetCategoryId: string
+        targetSubCategoryId?: string
+      }>(response, '添加站点失败')
+      const updatedNavigationData = addSiteToNavigationData(
+        navigationData,
+        result.item,
+        result.targetCategoryId,
+        result.targetSubCategoryId
+      )
+      setNavigationData(updatedNavigationData)
+      setSites(extractSites(updatedNavigationData))
 
       toast({
         title: "成功",
@@ -731,8 +763,6 @@ export default function SiteListPage() {
       })
       setShowAddDialog(false)
 
-      // Refresh the sites list
-      fetchSites()
     } catch (error) {
       console.error('Add site error:', error)
       toast({
@@ -762,120 +792,40 @@ export default function SiteListPage() {
 
     setIsEditingSubmitting(true)
     try {
-      // Create a copy of navigation data
-      const updatedNavigationData = [...navigationData]
-
-      // Create updated item
-      const updatedItem: NavigationSubItem = {
-        id: editingSite.id,
-        title: editSite.name,
-        href: editSite.url,
-        description: editSite.description,
-        icon: editSite.icon,
-        enabled: editSite.enabled,
-        isPrivate: editSite.isPrivate
-      }
-
-      // Find current location and target location
-      let currentLocation: { categoryIndex: number; subCategoryIndex?: number; itemIndex: number } | null = null
-      let targetLocation: { categoryIndex: number; subCategoryIndex?: number } | null = null
-
-      // Find current location
-      for (let categoryIndex = 0; categoryIndex < updatedNavigationData.length; categoryIndex++) {
-        const category = updatedNavigationData[categoryIndex]
-
-        // Check main category items
-        if (category.items) {
-          const itemIndex = category.items.findIndex(item => item.id === editingSite.id)
-          if (itemIndex !== -1) {
-            currentLocation = { categoryIndex, itemIndex }
-            break
-          }
-        }
-
-        // Check subcategory items
-        if (category.subCategories) {
-          for (let subIndex = 0; subIndex < category.subCategories.length; subIndex++) {
-            const subCategory = category.subCategories[subIndex]
-            if (subCategory.items) {
-              const itemIndex = subCategory.items.findIndex(item => item.id === editingSite.id)
-              if (itemIndex !== -1) {
-                currentLocation = { categoryIndex, subCategoryIndex: subIndex, itemIndex }
-                break
-              }
-            }
-          }
-          if (currentLocation) break
-        }
-      }
-
-      // Find target location
-      const targetCategoryIndex = updatedNavigationData.findIndex(cat => cat.id === editSite.categoryId)
-      if (targetCategoryIndex === -1) {
-        throw new Error('Target category not found')
-      }
-
-      if (editSite.subCategoryId && editSite.subCategoryId !== "none") {
-        const targetSubCategoryIndex = updatedNavigationData[targetCategoryIndex].subCategories?.findIndex(
-          sub => sub.id === editSite.subCategoryId
-        )
-        if (targetSubCategoryIndex !== undefined && targetSubCategoryIndex !== -1) {
-          targetLocation = { categoryIndex: targetCategoryIndex, subCategoryIndex: targetSubCategoryIndex }
-        }
-      } else {
-        targetLocation = { categoryIndex: targetCategoryIndex }
-      }
-
-      if (!currentLocation || !targetLocation) {
-        throw new Error('Could not find current or target location')
-      }
-
-      // Check if location changed
-      const locationChanged =
-        currentLocation.categoryIndex !== targetLocation.categoryIndex ||
-        currentLocation.subCategoryIndex !== targetLocation.subCategoryIndex
-
-      if (locationChanged) {
-        // Remove from current location
-        if (currentLocation.subCategoryIndex !== undefined) {
-          updatedNavigationData[currentLocation.categoryIndex].subCategories![currentLocation.subCategoryIndex].items.splice(currentLocation.itemIndex, 1)
-        } else {
-          updatedNavigationData[currentLocation.categoryIndex].items!.splice(currentLocation.itemIndex, 1)
-        }
-
-        // Add to target location
-        if (targetLocation.subCategoryIndex !== undefined) {
-          if (!updatedNavigationData[targetLocation.categoryIndex].subCategories![targetLocation.subCategoryIndex].items) {
-            updatedNavigationData[targetLocation.categoryIndex].subCategories![targetLocation.subCategoryIndex].items = []
-          }
-          updatedNavigationData[targetLocation.categoryIndex].subCategories![targetLocation.subCategoryIndex].items.push(updatedItem)
-        } else {
-          if (!updatedNavigationData[targetLocation.categoryIndex].items) {
-            updatedNavigationData[targetLocation.categoryIndex].items = []
-          }
-          updatedNavigationData[targetLocation.categoryIndex].items.push(updatedItem)
-        }
-      } else {
-        // Update in place (same location)
-        if (currentLocation.subCategoryIndex !== undefined) {
-          updatedNavigationData[currentLocation.categoryIndex].subCategories![currentLocation.subCategoryIndex].items[currentLocation.itemIndex] = updatedItem
-        } else {
-          updatedNavigationData[currentLocation.categoryIndex].items![currentLocation.itemIndex] = updatedItem
-        }
-      }
-
-      // Save to API
-      const response = await fetch('/api/navigation', {
-        method: 'POST',
+      const response = await fetch(`/api/navigation/sites/${encodeURIComponent(editingSite.id)}`, {
+        method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          navigationItems: updatedNavigationData
+          title: editSite.name,
+          href: editSite.url,
+          description: editSite.description,
+          icon: editSite.icon,
+          enabled: editSite.enabled,
+          isPrivate: editSite.isPrivate,
+          targetCategoryId: editSite.categoryId,
+          targetSubCategoryId: editSite.subCategoryId || null,
         }),
       })
 
-      if (!response.ok) throw new Error('Failed to save')
+      const result = await response.json().catch(() => null) as {
+        item?: NavigationSubItem
+        error?: string
+      } | null
+      if (!response.ok || !result?.item) {
+        throw new Error(result?.error || 'Failed to save')
+      }
+
+      const updatedNavigationData = applySiteUpdate(
+        navigationData,
+        editingSite.id,
+        result.item,
+        editSite.categoryId,
+        editSite.subCategoryId
+      )
+      setNavigationData(updatedNavigationData)
+      setSites(extractSites(updatedNavigationData))
 
       toast({
         title: "成功",
@@ -886,18 +836,16 @@ export default function SiteListPage() {
       setEditSite({
         name: '',
         url: '',
-      description: '',
-      icon: '',
-      categoryId: '',
-      subCategoryId: '',
-      enabled: true,
-      isPrivate: false
+        description: '',
+        icon: '',
+        categoryId: '',
+        subCategoryId: '',
+        enabled: true,
+        isPrivate: false
       })
       setEditingSite(null)
       setShowEditDialog(false)
 
-      // Refresh the sites list
-      fetchSites()
     } catch (error) {
       console.error('Edit site error:', error)
       toast({
@@ -964,68 +912,29 @@ export default function SiteListPage() {
     if (!deletingSite) return
 
     try {
-      // Create a copy of navigation data
-      const updatedNavigationData = [...navigationData]
-
-      // Find and remove the site
-      let found = false
-      for (let categoryIndex = 0; categoryIndex < updatedNavigationData.length; categoryIndex++) {
-        const category = updatedNavigationData[categoryIndex]
-
-        // Check main category items
-        if (category.items) {
-          const itemIndex = category.items.findIndex(item => item.id === deletingSite.id)
-          if (itemIndex !== -1) {
-            updatedNavigationData[categoryIndex].items!.splice(itemIndex, 1)
-            found = true
-            break
-          }
-        }
-
-        // Check subcategory items
-        if (category.subCategories && !found) {
-          for (let subIndex = 0; subIndex < category.subCategories.length; subIndex++) {
-            const subCategory = category.subCategories[subIndex]
-            if (subCategory.items) {
-              const itemIndex = subCategory.items.findIndex(item => item.id === deletingSite.id)
-              if (itemIndex !== -1) {
-                updatedNavigationData[categoryIndex].subCategories![subIndex].items.splice(itemIndex, 1)
-                found = true
-                break
-              }
-            }
-          }
-        }
-
-        if (found) break
-      }
-
-      if (!found) {
-        throw new Error('Site not found')
-      }
-
-      // Save to API
-      const response = await fetch('/api/navigation', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          navigationItems: updatedNavigationData
-        }),
-      })
-
-      if (!response.ok) throw new Error('Failed to save')
+      const response = await fetch(
+        `/api/navigation/sites/${encodeURIComponent(deletingSite.id)}`,
+        { method: 'DELETE' }
+      )
+      const result = await readMutationResponse<{ deletedIds: string[] }>(
+        response,
+        '删除站点失败'
+      )
+      const updatedNavigationData = removeSitesFromNavigationData(
+        navigationData,
+        result.deletedIds
+      )
+      setNavigationData(updatedNavigationData)
+      setSites(extractSites(updatedNavigationData))
 
       toast({
         title: "成功",
         description: "站点删除成功",
       })
 
-      // Close dialog and refresh
+      // Close dialog
       setShowDeleteSiteDialog(false)
       setDeletingSite(null)
-      fetchSites()
     } catch (error) {
       console.error('Delete site error:', error)
       toast({
@@ -1257,10 +1166,19 @@ export default function SiteListPage() {
 
     setBatchOperation(operation)
     try {
+      const response = await fetch('/api/navigation/sites', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ operation, siteIds: selectedSites }),
+      })
+      const result = await readMutationResponse<{
+        updatedIds: string[]
+        updatedCount: number
+      }>(response, `批量${getBatchOperationLabel(operation)}失败`)
       const updatedNavigationData = cloneNavigationData(navigationData)
-      let updated = 0
+      const updatedIds = new Set(result.updatedIds)
 
-      for (const siteId of selectedSites) {
+      for (const siteId of updatedIds) {
         const location = findSiteLocation(updatedNavigationData, siteId)
         if (!location) continue
 
@@ -1276,17 +1194,16 @@ export default function SiteListPage() {
           } else {
             updatedNavigationData[location.categoryIndex].items[location.itemIndex] = nextItem
           }
-          updated += 1
         }
       }
-
-      if (updated > 0) {
-        await saveNavigationItems(updatedNavigationData, `批量${getBatchOperationLabel(operation)}失败`)
+      if (result.updatedCount > 0) {
+        setNavigationData(updatedNavigationData)
+        setSites(extractSites(updatedNavigationData))
       }
 
       toast({
-        title: updated > 0 ? "成功" : "完成",
-        description: `已${getBatchOperationLabel(operation)} ${updated} 个站点`,
+        title: result.updatedCount > 0 ? "成功" : "完成",
+        description: `已${getBatchOperationLabel(operation)} ${result.updatedCount} 个站点`,
       })
     } catch (error) {
       console.error('Batch boolean update error:', error)
@@ -1317,6 +1234,20 @@ export default function SiteListPage() {
 
     setBatchOperation('move')
     try {
+      const response = await fetch('/api/navigation/sites', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          operation: 'move',
+          siteIds: selectedSites,
+          targetCategoryId: batchMoveCategoryId,
+          targetSubCategoryId: batchMoveSubCategoryId,
+        }),
+      })
+      const result = await readMutationResponse<{
+        updatedIds: string[]
+        updatedCount: number
+      }>(response, '批量移动分类失败')
       const updatedNavigationData = cloneNavigationData(navigationData)
       const targetCategoryIndex = updatedNavigationData.findIndex((category) => category.id === batchMoveCategoryId)
       if (targetCategoryIndex === -1) {
@@ -1338,7 +1269,7 @@ export default function SiteListPage() {
 
       const movedItems: NavigationSubItem[] = []
 
-      for (const siteId of selectedSites) {
+      for (const siteId of result.updatedIds) {
         const location = findSiteLocation(updatedNavigationData, siteId)
         if (!location) continue
 
@@ -1365,11 +1296,12 @@ export default function SiteListPage() {
         ]
       }
 
-      await saveNavigationItems(updatedNavigationData, '批量移动分类失败')
+      setNavigationData(updatedNavigationData)
+      setSites(extractSites(updatedNavigationData))
 
       toast({
         title: "成功",
-        description: `已移动 ${movedItems.length} 个站点`,
+        description: `已移动 ${result.updatedCount} 个站点`,
       })
 
       setShowBatchMoveDialog(false)

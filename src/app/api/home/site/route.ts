@@ -5,7 +5,10 @@ export const runtime = 'edge'
 
 export async function GET() {
   try {
-    const siteData = await getFileContent('src/navsphere/content/site.json')
+    const siteData = await getFileContent(
+      'src/navsphere/content/site.json',
+      { bypassCache: true }
+    )
     return NextResponse.json(siteData, {
       headers: {
         'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',

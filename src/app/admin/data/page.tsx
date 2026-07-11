@@ -2,10 +2,10 @@
 export const runtime = 'edge'
 
 import { useCallback, useEffect, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { NavigationItem, NavigationCategory, NavigationSubItem } from '@/types/navigation'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { JsonEditor } from "@/components/ui/json-editor"
 import { useToast } from "@/components/ui/use-toast"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -35,6 +35,21 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
+
+const JsonEditor = dynamic(
+  () => import('@/components/ui/json-editor').then(module => module.JsonEditor),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-[500px] items-center justify-center rounded-lg border text-sm text-muted-foreground">
+        <div className="flex items-center gap-2">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          加载高级编辑器...
+        </div>
+      </div>
+    ),
+  }
+)
 
 type NavigationHistorySummary = {
   id: string

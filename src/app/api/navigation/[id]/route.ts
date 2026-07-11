@@ -12,7 +12,10 @@ export async function GET(
 ) {
   try {
     const { id } = await params
-    const data = await getFileContent('src/navsphere/content/navigation.json') as NavigationData
+    const data = await getFileContent(
+      'src/navsphere/content/navigation.json',
+      { bypassCache: true }
+    ) as NavigationData
     const item = data.navigationItems.find(item => item.id === id)
 
     if (!item) {
@@ -37,7 +40,10 @@ export async function PUT(
     }
 
     const updatedItem: NavigationItem = await request.json()
-    const data = await getFileContent('src/navsphere/content/navigation.json') as NavigationData
+    const data = await getFileContent(
+      'src/navsphere/content/navigation.json',
+      { bypassCache: true }
+    ) as NavigationData
 
     // 确保更新的导航项包含所有必需的字段
     const existingItem = data.navigationItems.find(item => item.id === id)
@@ -78,7 +84,10 @@ export async function DELETE(
       return new Response('Unauthorized', { status: 401 })
     }
 
-    const data = await getFileContent('src/navsphere/content/navigation.json') as NavigationData
+    const data = await getFileContent(
+      'src/navsphere/content/navigation.json',
+      { bypassCache: true }
+    ) as NavigationData
     const updatedItems = data.navigationItems.filter(item => item.id !== id)
 
     await saveNavigationData({ navigationItems: updatedItems }, 'Delete navigation item')

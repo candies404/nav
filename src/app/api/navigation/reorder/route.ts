@@ -23,7 +23,10 @@ export async function POST(request: Request) {
     const itemId = typeof body.itemId === 'string' ? body.itemId : null
 
     // 获取当前导航数据
-    const data = await getFileContent('src/navsphere/content/navigation.json') as NavigationData
+    const data = await getFileContent(
+      'src/navsphere/content/navigation.json',
+      { bypassCache: true }
+    ) as NavigationData
 
     // 确保导航项存在
     if (!data.navigationItems || !Array.isArray(data.navigationItems)) {

@@ -2,12 +2,16 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { commitFile, getFileContent, getStorageErrorMessage } from '@/lib/storage'
 import type { SiteInfo } from '@/types/site'
+import { revalidateSiteContent } from '@/lib/cache-invalidation'
 
 export const runtime = 'edge'
 
 export async function GET() {
   try {
-    const data = await getFileContent('src/navsphere/content/site.json') as SiteInfo
+    const data = await getFileContent(
+      'src/navsphere/content/site.json',
+      { bypassCache: true }
+    ) as SiteInfo
     return NextResponse.json(data)
   } catch (error) {
     console.error('Failed to read site data:', error)
@@ -44,6 +48,7 @@ export async function POST(request: Request) {
       JSON.stringify(data, null, 2),
       'Update site configuration'
     )
+    revalidateSiteContent()
 
     return NextResponse.json({ success: true })
   } catch (error) {

@@ -102,78 +102,63 @@ export async function deleteManagedResources(resourceHashes: string[]) {
 }
 
 export async function checkManagedResourceReferences(resourcePaths: string[]) {
-  const navigationData = await getFileContent('src/navsphere/content/navigation.json') as NavigationData
-  const siteData = await getFileContent('src/navsphere/content/site.json') as SiteConfig
-  const references: ResourceReferenceMap = {}
+  const [navigationData, siteData] = await Promise.all([
+    getFileContent('src/navsphere/content/navigation.json') as Promise<NavigationData>,
+    getFileContent('src/navsphere/content/site.json') as Promise<SiteConfig>,
+  ])
+  const requestedPaths = new Set(resourcePaths)
+  const references: ResourceReferenceMap = Object.fromEntries(
+    [...requestedPaths].map(resourcePath => [resourcePath, []])
+  )
 
-  for (const resourcePath of resourcePaths) {
-    references[resourcePath] = []
+  const addReference = (resourcePath: string | undefined, reference: ResourceReference) => {
+    if (!resourcePath || !requestedPaths.has(resourcePath)) return
+    references[resourcePath].push(reference)
+  }
 
-    if (navigationData?.navigationItems) {
-      for (const navItem of navigationData.navigationItems) {
-        if (navItem.icon === resourcePath) {
-          references[resourcePath].push({
-            type: 'navigation',
-            location: `导航项: ${navItem.title}`,
-            title: navItem.title,
-          })
-        }
+  for (const navItem of navigationData?.navigationItems || []) {
+    addReference(navItem.icon, {
+      type: 'navigation',
+      location: `导航项: ${navItem.title}`,
+      title: navItem.title,
+    })
 
-        if (navItem.items) {
-          for (const subItem of navItem.items) {
-            if (subItem.icon === resourcePath) {
-              references[resourcePath].push({
-                type: 'navigation',
-                location: `导航子项: ${navItem.title} > ${subItem.title}`,
-                title: subItem.title,
-              })
-            }
-          }
-        }
-
-        if (navItem.subCategories) {
-          for (const subCategory of navItem.subCategories) {
-            if (subCategory.icon === resourcePath) {
-              references[resourcePath].push({
-                type: 'navigation',
-                location: `导航分类: ${navItem.title} > ${subCategory.title}`,
-                title: subCategory.title,
-              })
-            }
-
-            if (subCategory.items) {
-              for (const item of subCategory.items) {
-                if (item.icon === resourcePath) {
-                  references[resourcePath].push({
-                    type: 'navigation',
-                    location: `导航项: ${navItem.title} > ${subCategory.title} > ${item.title}`,
-                    title: item.title,
-                  })
-                }
-              }
-            }
-          }
-        }
-      }
+    for (const subItem of navItem.items || []) {
+      addReference(subItem.icon, {
+        type: 'navigation',
+        location: `导航子项: ${navItem.title} > ${subItem.title}`,
+        title: subItem.title,
+      })
     }
 
-    if (siteData?.appearance) {
-      if (siteData.appearance.logo === resourcePath) {
-        references[resourcePath].push({
-          type: 'site',
-          location: '站点Logo',
-          title: '站点Logo',
-        })
-      }
+    for (const subCategory of navItem.subCategories || []) {
+      addReference(subCategory.icon, {
+        type: 'navigation',
+        location: `导航分类: ${navItem.title} > ${subCategory.title}`,
+        title: subCategory.title,
+      })
 
-      if (siteData.appearance.favicon === resourcePath) {
-        references[resourcePath].push({
-          type: 'site',
-          location: '站点图标',
-          title: '站点图标',
+      for (const item of subCategory.items || []) {
+        addReference(item.icon, {
+          type: 'navigation',
+          location: `导航项: ${navItem.title} > ${subCategory.title} > ${item.title}`,
+          title: item.title,
         })
       }
     }
+  }
+
+  if (siteData?.appearance) {
+    addReference(siteData.appearance.logo, {
+      type: 'site',
+      location: '站点Logo',
+      title: '站点Logo',
+    })
+    addReference(siteData.appearance.favicon, {
+      type: 'site',
+      location: '站点图标',
+      title: '站点图标',
+    })
   }
 
   return references

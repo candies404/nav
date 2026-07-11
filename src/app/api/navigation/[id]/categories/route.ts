@@ -22,7 +22,10 @@ export async function DELETE(
       return NextResponse.json({ error: 'Category ID is required' }, { status: 400 })
     }
 
-    const data = await getFileContent('src/navsphere/content/navigation.json') as NavigationData
+    const data = await getFileContent(
+      'src/navsphere/content/navigation.json',
+      { bypassCache: true }
+    ) as NavigationData
 
     const navigation = data.navigationItems.find(nav => nav.id === id)
     if (!navigation) {

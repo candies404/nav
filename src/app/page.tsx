@@ -2,24 +2,12 @@ import { NavigationContent } from '@/components/navigation-content'
 import { Metadata } from 'next/types'
 import { ScrollToTop } from '@/components/ScrollToTop'
 import { Container } from '@/components/ui/container'
-import { getProcessedData } from '@/lib/data-loader'
-import { getFileContent } from '@/lib/storage'
+import { getHomeData, getHomeSiteData } from '@/lib/home-data'
 import { isAuthenticatedRequest } from '@/lib/auth-token'
 import { headers } from 'next/headers'
-import type { NavigationDataRaw } from '@/types/navigation'
-import type { SiteInfo } from '@/types/site'
-
-async function getData(includePrivate = false) {
-  const [navigationData, siteDataRaw] = await Promise.all([
-    getFileContent('src/navsphere/content/navigation.json') as Promise<NavigationDataRaw>,
-    getFileContent('src/navsphere/content/site.json') as Promise<SiteInfo>,
-  ])
-
-  return getProcessedData(navigationData, siteDataRaw, includePrivate)
-}
 
 export async function generateMetadata(): Promise<Metadata> {
-  const { siteData } = await getData()
+  const siteData = await getHomeSiteData()
 
   return {
     title: siteData.basic.title,
@@ -33,13 +21,16 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function HomePage() {
   const requestHeaders = await headers()
-  const { navigationData, siteData } = await getData(
-    await isAuthenticatedRequest({ headers: requestHeaders })
-  )
+  const includePrivate = await isAuthenticatedRequest({ headers: requestHeaders })
+  const { navigationData, siteData } = await getHomeData(includePrivate)
 
   return (
     <Container>
-      <NavigationContent navigationData={navigationData} siteData={siteData} />
+      <NavigationContent
+        navigationData={navigationData}
+        siteData={siteData}
+        searchScope={includePrivate ? 'private' : 'public'}
+      />
       <ScrollToTop />
     </Container>
   )

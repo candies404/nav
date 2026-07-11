@@ -15,6 +15,10 @@ type DataCacheEntry = {
   expiresAt: number
 }
 
+type GetFileContentOptions = {
+  bypassCache?: boolean
+}
+
 const MISSING_REDIS_CONFIG_MESSAGE =
   '数据存储未配置。当前只能读取内置默认数据，后台保存需要先在系统状态中检查数据存储配置。'
 
@@ -49,10 +53,13 @@ const BLOB_CACHE_MAX_AGE_SECONDS = Number(process.env.NAVSPHERE_BLOB_CACHE_MAX_A
 const DATA_HISTORY_LIMIT = positiveInteger(process.env.NAVSPHERE_DATA_HISTORY_LIMIT, 10)
 const globalCache = globalThis as typeof globalThis & {
   __navsphereDataCache?: Map<string, DataCacheEntry>
+  __navsphereDataInflight?: Map<string, Promise<unknown>>
   __navsphereRedisConfigWarned?: boolean
 }
 const dataCache = globalCache.__navsphereDataCache ?? new Map<string, DataCacheEntry>()
+const dataInflight = globalCache.__navsphereDataInflight ?? new Map<string, Promise<unknown>>()
 globalCache.__navsphereDataCache = dataCache
+globalCache.__navsphereDataInflight = dataInflight
 
 function warnMissingRedisConfig() {
   if (globalCache.__navsphereRedisConfigWarned) return
@@ -211,12 +218,33 @@ function getBlobOptions() {
   }
 }
 
-export async function getFileContent(path: string) {
-  const cached = getCachedContent(path)
-  if (cached !== undefined) {
-    return cached
+export async function getFileContent(path: string, options: GetFileContentOptions = {}) {
+  if (!options.bypassCache) {
+    const cached = getCachedContent(path)
+    if (cached !== undefined) {
+      return cached
+    }
   }
 
+  const key = options.bypassCache ? `${dataKey(path)}:fresh` : dataKey(path)
+  const pendingRequest = dataInflight.get(key)
+  if (pendingRequest) {
+    return cloneDefault(await pendingRequest)
+  }
+
+  const request = loadFileContent(path)
+  dataInflight.set(key, request)
+
+  try {
+    return cloneDefault(await request)
+  } finally {
+    if (dataInflight.get(key) === request) {
+      dataInflight.delete(key)
+    }
+  }
+}
+
+async function loadFileContent(path: string) {
   try {
     const raw = await redisCommand<string>(['GET', dataKey(path)])
     if (!raw) {

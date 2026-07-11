@@ -8,20 +8,35 @@ export const runtime = 'edge'
 
 export async function GET(request: Request) {
   try {
-    const navigationData = await getFileContent('src/navsphere/content/navigation.json') as NavigationDataRaw
-    const isAuthenticated = await isAuthenticatedRequest(request)
+    const searchScope = new URL(request.url).searchParams.get('scope')
+    const wantsPrivateData = searchScope === 'private'
+    const [navigationData, isAuthenticated] = await Promise.all([
+      getFileContent(
+        'src/navsphere/content/navigation.json',
+        { bypassCache: true }
+      ) as Promise<NavigationDataRaw>,
+      isAuthenticatedRequest(request),
+    ])
+
+    if (wantsPrivateData && !isAuthenticated) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401, headers: { 'Cache-Control': 'private, no-store' } }
+      )
+    }
+
     const filteredNavigationData = filterNavigationData(
       processNavigationData(navigationData),
-      isAuthenticated
+      wantsPrivateData
     )
 
     return NextResponse.json(filteredNavigationData, {
       headers: {
-        'Cache-Control': isAuthenticated
+        'Cache-Control': wantsPrivateData
           ? 'private, no-store'
           : 'public, s-maxage=3600, stale-while-revalidate=86400',
         'Content-Type': 'application/json',
-        'Vary': 'Cookie',
+        ...(wantsPrivateData ? { 'Vary': 'Cookie' } : {}),
       },
     })
   } catch (error) {

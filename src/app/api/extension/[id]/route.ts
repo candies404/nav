@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { commitFile, getFileContent, getStorageErrorMessage } from '@/lib/storage'
+import { getFileContent, getStorageErrorMessage } from '@/lib/storage'
+import { saveNavigationData } from '@/lib/navigation-storage'
 import type { NavigationData, NavigationItem } from '@/types/navigation'
 
 export const runtime = 'edge'
@@ -17,7 +18,10 @@ export async function PUT(
     }
 
     const updatedItem: NavigationItem = await request.json()
-    const data = await getFileContent('src/navsphere/content/navigation.json') as NavigationData
+    const data = await getFileContent(
+      'src/navsphere/content/navigation.json',
+      { bypassCache: true }
+    ) as NavigationData
 
     // 确保更新的导航项包含所有必需的字段
     const existingItem = data.navigationItems.find(item => item.id === id)
@@ -56,10 +60,9 @@ export async function PUT(
       item.id === id ? mergedItem : item
     )
 
-    await commitFile(
-      'src/navsphere/content/navigation.json',
-      JSON.stringify({ navigationItems: updatedItems }, null, 2),
-      'Update navigation item'
+    await saveNavigationData(
+      { navigationItems: updatedItems },
+      'Update navigation item from extension'
     )
 
     return NextResponse.json(mergedItem)

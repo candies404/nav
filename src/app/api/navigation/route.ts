@@ -10,8 +10,13 @@ export const runtime = 'edge'
 
 export async function GET(request: Request) {
   try {
-    const data = await getFileContent('src/navsphere/content/navigation.json') as NavigationDataRaw
-    const isAuthenticated = await isAuthenticatedRequest(request)
+    const [data, isAuthenticated] = await Promise.all([
+      getFileContent(
+        'src/navsphere/content/navigation.json',
+        { bypassCache: true }
+      ) as Promise<NavigationDataRaw>,
+      isAuthenticatedRequest(request),
+    ])
 
     if (isAuthenticated) {
       return NextResponse.json(data, {

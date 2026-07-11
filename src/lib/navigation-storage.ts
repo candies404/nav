@@ -12,6 +12,7 @@ import {
   pushDataHistoryVersion,
 } from '@/lib/storage'
 import type { NavigationData, NavigationSubItem } from '@/types/navigation'
+import { revalidateNavigationContent } from '@/lib/cache-invalidation'
 
 const NAVIGATION_PATH = 'src/navsphere/content/navigation.json'
 
@@ -48,7 +49,10 @@ export async function saveNavigationData(
   message = 'Update navigation data',
   options: SaveNavigationDataOptions = {}
 ): Promise<SaveNavigationDataResult> {
-  const previousData = await getFileContent(NAVIGATION_PATH) as NavigationData
+  const previousData = await getFileContent(
+    NAVIGATION_PATH,
+    { bypassCache: true }
+  ) as NavigationData
   const previousContent = stringifyNavigationData(previousData)
   const nextContent = stringifyNavigationData(data)
   let historyRecorded = false
@@ -69,6 +73,7 @@ export async function saveNavigationData(
     nextContent,
     message
   )
+  revalidateNavigationContent()
 
   try {
     await cleanupRemovedSiteFavicons(previousData, data)

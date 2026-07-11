@@ -3,18 +3,41 @@
 export const runtime = 'edge'
 
 import { useState } from "react"
+import dynamic from 'next/dynamic'
 import { Button } from "@/registry/new-york/ui/button"
-import { NavigationCard } from "./components/NavigationCard"
-import { AddNavigationForm } from "./components/AddNavigationForm"
 import { Input } from "@/registry/new-york/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/registry/new-york/ui/dialog"
 import { useToast } from "@/registry/new-york/hooks/use-toast"
 import { Skeleton } from "@/registry/new-york/ui/skeleton"
 import useSWR from 'swr'
 import { NavigationItem } from "@/types/navigation"
-import { DragDropContext, Droppable, DropResult } from '@hello-pangea/dnd'
+import type {
+  DragDropContextProps,
+  DroppableProps,
+  DropResult,
+} from '@hello-pangea/dnd'
 import { Plus, AlertTriangle, Inbox } from 'lucide-react'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/registry/new-york/ui/select"
+
+const NavigationCard = dynamic(
+  () => import('./components/NavigationCard').then(module => module.NavigationCard),
+  { ssr: false }
+)
+const AddNavigationForm = dynamic(
+  () => import('./components/AddNavigationForm').then(module => module.AddNavigationForm),
+  { ssr: false }
+)
+const DragDropContext = dynamic<DragDropContextProps>(
+  () => import('@hello-pangea/dnd').then(module => module.DragDropContext),
+  {
+    ssr: false,
+    loading: () => <Skeleton className="h-24 w-full rounded-lg" />,
+  }
+)
+const Droppable = dynamic<DroppableProps>(
+  () => import('@hello-pangea/dnd').then(module => module.Droppable),
+  { ssr: false }
+)
 
 
 async function fetcher(url: string): Promise<NavigationItem[]> {

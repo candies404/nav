@@ -3,6 +3,7 @@
 export const runtime = 'edge'
 
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { useParams, useRouter } from 'next/navigation'
 import { Button } from "@/registry/new-york/ui/button"
 import { useToast } from "@/registry/new-york/hooks/use-toast"
@@ -29,15 +30,14 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/registry/new-york/ui/dialog"
-import { AddCategoryForm } from '../../components/AddCategoryForm'
 import { Input } from "@/registry/new-york/ui/input"
-import {
-  DragDropContext,
-  Droppable,
-  Draggable,
+import type {
+  DragDropContextProps,
+  DroppableProps,
+  DraggableProps,
   DropResult,
-  type DraggableProvided,
-  type DraggableStateSnapshot
+  DraggableProvided,
+  DraggableStateSnapshot,
 } from '@hello-pangea/dnd'
 
 import { Badge } from "@/registry/new-york/ui/badge"
@@ -50,6 +50,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/registry/new-york/ui/select"
+
+const AddCategoryForm = dynamic(
+  () => import('../../components/AddCategoryForm').then(module => module.AddCategoryForm),
+  { ssr: false }
+)
+const DragDropContext = dynamic<DragDropContextProps>(
+  () => import('@hello-pangea/dnd').then(module => module.DragDropContext),
+  {
+    ssr: false,
+    loading: () => <Skeleton className="h-24 w-full rounded-lg" />,
+  }
+)
+const Droppable = dynamic<DroppableProps>(
+  () => import('@hello-pangea/dnd').then(module => module.Droppable),
+  { ssr: false }
+)
+const Draggable = dynamic<DraggableProps>(
+  () => import('@hello-pangea/dnd').then(module => module.Draggable),
+  { ssr: false }
+)
 
 export default function CategoriesPage() {
   const params = useParams<{ id: string }>()

@@ -1,6 +1,7 @@
 'use client'
 
 import { memo, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { Button } from "@/registry/new-york/ui/button"
 import { 
@@ -12,8 +13,7 @@ import {
   DialogDescription, 
 } from "@/registry/new-york/ui/dialog"
 import { useToast } from "@/registry/new-york/hooks/use-toast"
-import { AddNavigationForm } from './AddNavigationForm'
-import { Draggable } from "@hello-pangea/dnd"
+import type { DraggableProps } from '@hello-pangea/dnd'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/registry/new-york/ui/tooltip"
 import { NavigationItem } from '@/types/navigation'
 import { navigationIcons, type IconType } from '@/lib/icons'
@@ -28,6 +28,15 @@ import {
 } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { Badge } from "@/registry/new-york/ui/badge"
+
+const AddNavigationForm = dynamic(
+  () => import('./AddNavigationForm').then(module => module.AddNavigationForm),
+  { ssr: false }
+)
+const Draggable = dynamic<DraggableProps>(
+  () => import('@hello-pangea/dnd').then(module => module.Draggable),
+  { ssr: false }
+)
 
 interface NavigationCardProps {
   item: NavigationItem
