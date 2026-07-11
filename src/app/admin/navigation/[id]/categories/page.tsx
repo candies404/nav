@@ -20,7 +20,7 @@ import {
   ChevronsUp,
   ChevronsDown
 } from 'lucide-react'
-import { NavigationItem, NavigationCategory } from '@/types/navigation'
+import { NavigationCategory } from '@/types/navigation'
 import {
   Dialog,
   DialogContent,
@@ -71,15 +71,28 @@ const Draggable = dynamic<DraggableProps>(
   { ssr: false }
 )
 
+type CategorySummary = Omit<NavigationCategory, 'items'> & {
+  siteCount: number
+}
+
+type NavigationCategoriesView = {
+  id: string
+  title: string
+  icon?: string
+  description?: string
+  enabled?: boolean
+  subCategories: CategorySummary[]
+}
+
 export default function CategoriesPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
   const { toast } = useToast()
   const navigationId = params?.id
-  const [navigation, setNavigation] = useState<NavigationItem | null>(null)
+  const [navigation, setNavigation] = useState<NavigationCategoriesView | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
-  const [editingCategory, setEditingCategory] = useState<{ category: NavigationCategory } | null>(null)
-  const [deletingCategory, setDeletingCategory] = useState<{ category: NavigationCategory } | null>(null)
+  const [editingCategory, setEditingCategory] = useState<{ category: CategorySummary } | null>(null)
+  const [deletingCategory, setDeletingCategory] = useState<{ category: CategorySummary } | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [statusFilter, setStatusFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
@@ -91,7 +104,7 @@ export default function CategoriesPage() {
 
     try {
       setIsLoading(true)
-      const response = await fetch(`/api/navigation/${navigationId}`)
+      const response = await fetch(`/api/navigation/${navigationId}/categories`)
       if (!response.ok) throw new Error('Failed to fetch')
       const data = await response.json()
       setNavigation(data)
@@ -123,29 +136,16 @@ export default function CategoriesPage() {
     if (!navigationId || !navigation) return
 
     try {
-      const newCategory: NavigationCategory = {
-        id: crypto.randomUUID(),
-        title: values.title,
-        icon: values.icon,
-        description: values.description,
-        enabled: values.enabled,
-        items: []
-      }
-
-      const updatedNavigation: NavigationItem = {
-        ...navigation,
-        subCategories: [...(navigation.subCategories || []), newCategory]
-      }
-
-      const response = await fetch(`/api/navigation/${navigationId}`, {
-        method: 'PUT',
+      const response = await fetch(`/api/navigation/${navigationId}/categories`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedNavigation)
+        body: JSON.stringify(values)
       })
 
       if (!response.ok) throw new Error('Failed to save')
+      const data = await response.json()
+      if (data.navigation) setNavigation(data.navigation)
 
-      await fetchNavigation()
       toast({
         title: "成功",
         description: "添加成功"
@@ -170,33 +170,19 @@ export default function CategoriesPage() {
     if (!navigationId || !navigation || !editingCategory) return
 
     try {
-      const updatedCategories = navigation.subCategories?.map((cat) =>
-        cat.id === editingCategory.category.id
-          ? {
-            ...cat,
-            title: values.title,
-            icon: values.icon,
-            description: values.description,
-            enabled: values.enabled
-          }
-          : cat
-      ) || []
-
-      const updatedNavigation: NavigationItem = {
-        ...navigation,
-        subCategories: updatedCategories
-      }
-
-      const response = await fetch(`/api/navigation/${navigationId}`, {
-        method: 'PUT',
+      const response = await fetch(`/api/navigation/${navigationId}/categories`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedNavigation)
+        body: JSON.stringify({
+          categoryId: editingCategory.category.id,
+          ...values,
+        })
       })
 
       if (!response.ok) throw new Error('Failed to save')
 
       const updatedData = await response.json()
-      setNavigation(updatedData)
+      if (updatedData.navigation) setNavigation(updatedData.navigation)
       setEditingCategory(null)
 
       toast({
@@ -225,8 +211,9 @@ export default function CategoriesPage() {
       })
 
       if (!response.ok) throw new Error('Failed to delete')
+      const data = await response.json()
+      if (data.navigation) setNavigation(data.navigation)
 
-      await fetchNavigation()
       toast({
         title: "成功",
         description: "删除成功"
@@ -284,16 +271,18 @@ export default function CategoriesPage() {
     setNavigation(updatedNavigation)
 
     try {
-      const response = await fetch(`/api/navigation/${navigationId}`, {
+      const response = await fetch(`/api/navigation/${navigationId}/categories`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedNavigation)
+        body: JSON.stringify({
+          orderedCategoryIds: newCategories.map(category => category.id)
+        })
       })
 
       if (!response.ok) throw new Error('Failed to save order')
 
       const updatedData = await response.json()
-      setNavigation(updatedData)
+      if (updatedData.navigation) setNavigation(updatedData.navigation)
     } catch {
       setNavigation(previousNavigation)
       toast({
@@ -536,7 +525,7 @@ export default function CategoriesPage() {
 }
 
 interface CategoryRowProps {
-  category: NavigationCategory
+  category: CategorySummary
   actualIndex: number
   totalCount: number
   isFiltered: boolean
@@ -545,9 +534,9 @@ interface CategoryRowProps {
   snapshot: DraggableStateSnapshot
   onMoveToTop: (id: string) => void
   onMoveToBottom: (id: string) => void
-  onManageSites: (category: NavigationCategory) => void
-  onEdit: (category: NavigationCategory) => void
-  onDelete: (category: NavigationCategory) => void
+  onManageSites: (category: CategorySummary) => void
+  onEdit: (category: CategorySummary) => void
+  onDelete: (category: CategorySummary) => void
 }
 
 const CategoryRow = memo(function CategoryRow({
@@ -625,7 +614,7 @@ const CategoryRow = memo(function CategoryRow({
               </div>
             )}
             <div className="mt-1 text-xs text-muted-foreground">
-              {category.items?.length || 0} 个项目
+              {category.siteCount} 个项目
             </div>
           </div>
         </div>

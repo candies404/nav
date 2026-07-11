@@ -4,14 +4,24 @@ export const runtime = 'edge'
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useToast } from '@/components/ui/use-toast'
-import { NavigationCategory, NavigationItem } from '@/types/navigation'
+import { NavigationCategory } from '@/types/navigation'
+
+type CategorySummary = Omit<NavigationCategory, 'items'> & {
+  siteCount: number
+}
+
+type NavigationCategoriesView = {
+  id: string
+  title: string
+  subCategories: CategorySummary[]
+}
 
 export default function SubCategoryItemsPage() {
   const params = useParams()
   const router = useRouter()
   const { toast } = useToast()
-  const [category, setCategory] = useState<NavigationItem | null>(null)
-  const [subCategory, setSubCategory] = useState<NavigationCategory | null>(null)
+  const [category, setCategory] = useState<NavigationCategoriesView | null>(null)
+  const [subCategory, setSubCategory] = useState<CategorySummary | null>(null)
 
   const fetchData = useCallback(async () => {
     try {
@@ -20,12 +30,12 @@ export default function SubCategoryItemsPage() {
       }
 
       const navigationId = Array.isArray(params.id) ? params.id[0] : params.id
-      const response = await fetch(`/api/navigation/${navigationId}`)
+      const response = await fetch(`/api/navigation/${navigationId}/categories`)
       if (!response.ok) throw new Error('Failed to fetch')
-      const data = await response.json()
+      const data = await response.json() as NavigationCategoriesView
       setCategory(data)
       
-      const sub = data.subCategories?.find((s: NavigationCategory) => String(s.id) === params.subId)
+      const sub = data.subCategories?.find((s) => String(s.id) === params.subId)
       if (sub) {
         setSubCategory(sub)
       } else {

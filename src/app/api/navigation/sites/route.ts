@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth'
 import {
   addNavigationSite,
   batchUpdateNavigationSites,
+  listNavigationSites,
   NavigationSiteMutationError,
   reorderNavigationSites,
   type AddSiteInput,
@@ -11,6 +12,32 @@ import {
 import { getStorageErrorMessage } from '@/lib/storage'
 
 export const runtime = 'edge'
+
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const session = await auth()
+    if (!session?.user) return new Response('Unauthorized', { status: 401 })
+
+    const result = await listNavigationSites({
+      categoryId: searchParams.get('categoryId'),
+      subCategoryId: searchParams.get('subCategoryId'),
+    })
+
+    return NextResponse.json(result, {
+      headers: {
+        'Cache-Control': 'private, no-store',
+        'Vary': 'Cookie',
+      },
+    })
+  } catch (error) {
+    console.error('Failed to list sites:', error)
+    return NextResponse.json(
+      { error: getStorageErrorMessage(error, 'Failed to list sites') },
+      { status: 500 }
+    )
+  }
+}
 
 export async function POST(request: Request) {
   return withAuthenticatedMutation(async () => {

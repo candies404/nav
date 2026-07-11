@@ -82,13 +82,13 @@ interface Site {
   updatedAt: string
 }
 
-type SiteLocation = {
-  categoryIndex: number
-  subCategoryIndex?: number
-  itemIndex: number
-}
-
 type BatchOperation = 'enable' | 'disable' | 'private' | 'public' | 'move' | null
+
+type SiteListResponse = {
+  navigationItems: Category[]
+  totalSiteCount?: number
+  siteCount?: number
+}
 
 async function readMutationResponse<T>(response: Response, fallbackMessage: string): Promise<T> {
   const data = await response.json().catch(() => null) as (T & { error?: string }) | null
@@ -110,6 +110,7 @@ export default function SiteListPage() {
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [editingSite, setEditingSite] = useState<Site | null>(null)
   const [navigationData, setNavigationData] = useState<Category[]>([])
+  const [totalSiteCount, setTotalSiteCount] = useState(0)
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [subCategoryFilter, setSubCategoryFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
@@ -119,6 +120,7 @@ export default function SiteListPage() {
   const [sortItems, setSortItems] = useState<NavigationSubItem[]>([])
   const [sortOriginalItemIds, setSortOriginalItemIds] = useState<string[]>([])
   const [isSortSaving, setIsSortSaving] = useState(false)
+  const [isSortLoading, setIsSortLoading] = useState(false)
   const [isAddingSubmitting, setIsAddingSubmitting] = useState(false)
   const [isEditingSubmitting, setIsEditingSubmitting] = useState(false)
   const [showDeleteSiteDialog, setShowDeleteSiteDialog] = useState(false)
@@ -137,6 +139,7 @@ export default function SiteListPage() {
   const lastFetchedEditUrl = useRef<string>('')
   const isFetchingAddMetadataRef = useRef(false)
   const isFetchingEditMetadataRef = useRef(false)
+  const [hasAppliedUrlFilter, setHasAppliedUrlFilter] = useState(false)
   const [newSite, setNewSite] = useState({
     name: '',
     url: '',
@@ -164,10 +167,11 @@ export default function SiteListPage() {
     const searchParams = new URLSearchParams(window.location.search)
     const categoryId = searchParams.get('categoryId')
     const subCategoryId = searchParams.get('subCategoryId')
-    if (!categoryId) return
-
-    setCategoryFilter(categoryId)
-    setSubCategoryFilter(subCategoryId || 'all')
+    if (categoryId) {
+      setCategoryFilter(categoryId)
+      setSubCategoryFilter(subCategoryId || 'all')
+    }
+    setHasAppliedUrlFilter(true)
   }, [])
 
   useEffect(() => {
@@ -216,18 +220,31 @@ export default function SiteListPage() {
     return allSites;
   }, []);
 
+  const loadSiteList = useCallback(async (
+    categoryId: string,
+    subCategoryId: string
+  ): Promise<SiteListResponse> => {
+    const searchParams = new URLSearchParams()
+    if (categoryId !== 'all') searchParams.set('categoryId', categoryId)
+    if (subCategoryId !== 'all') searchParams.set('subCategoryId', subCategoryId)
+    const queryString = searchParams.toString()
+    const response = await fetch(`/api/navigation/sites${queryString ? `?${queryString}` : ''}`)
+    if (!response.ok) throw new Error('Failed to fetch')
+    return response.json() as Promise<SiteListResponse>
+  }, [])
+
   const fetchSites = useCallback(async () => {
     if (!isInitialLoadingRef.current) setIsLoading(true);
     try {
-      const response = await fetch('/api/navigation');
-      if (!response.ok) throw new Error('Failed to fetch');
-      const data = await response.json();
+      const data = await loadSiteList(categoryFilter, subCategoryFilter);
+      const navigationItems = data.navigationItems || []
 
       // Store navigation data for category selection
-      setNavigationData(data.navigationItems);
+      setNavigationData(navigationItems);
+      setTotalSiteCount(data.totalSiteCount ?? data.siteCount ?? 0)
 
       // Extract all sites from the navigation structure
-      const allSites = extractSites(data.navigationItems);
+      const allSites = extractSites(navigationItems);
       setSites(allSites);
     } catch (error) {
       console.error('Fetch error:', error);
@@ -237,136 +254,19 @@ export default function SiteListPage() {
         variant: "destructive"
       });
       setSites([]);
+      setNavigationData([]);
+      setTotalSiteCount(0);
     } finally {
       setIsLoading(false);
       isInitialLoadingRef.current = false;
       setIsInitialLoading(false);
     }
-  }, [extractSites, toast]);
+  }, [categoryFilter, extractSites, loadSiteList, subCategoryFilter, toast]);
 
   useEffect(() => {
+    if (!hasAppliedUrlFilter) return
     fetchSites()
-  }, [fetchSites])
-
-  const cloneNavigationData = useCallback((data: Category[]): Category[] => {
-    return data.map((category) => ({
-      ...category,
-      items: (category.items || []).map((item) => ({ ...item })),
-      subCategories: category.subCategories?.map((subCategory) => ({
-        ...subCategory,
-        items: (subCategory.items || []).map((item) => ({ ...item })),
-      })),
-    }))
-  }, [])
-
-  const findSiteLocation = useCallback((data: Category[], siteId: string): SiteLocation | null => {
-    for (let categoryIndex = 0; categoryIndex < data.length; categoryIndex++) {
-      const category = data[categoryIndex]
-
-      const itemIndex = category.items?.findIndex((item) => item.id === siteId) ?? -1
-      if (itemIndex !== -1) {
-        return { categoryIndex, itemIndex }
-      }
-
-      for (let subCategoryIndex = 0; subCategoryIndex < (category.subCategories?.length || 0); subCategoryIndex++) {
-        const subCategory = category.subCategories![subCategoryIndex]
-        const subItemIndex = subCategory.items?.findIndex((item) => item.id === siteId) ?? -1
-        if (subItemIndex !== -1) {
-          return { categoryIndex, subCategoryIndex, itemIndex: subItemIndex }
-        }
-      }
-    }
-
-    return null
-  }, [])
-
-  const getItemAtLocation = (data: Category[], location: SiteLocation) => {
-    if (location.subCategoryIndex !== undefined) {
-      return data[location.categoryIndex].subCategories![location.subCategoryIndex].items[location.itemIndex]
-    }
-
-    return data[location.categoryIndex].items[location.itemIndex]
-  }
-
-  const applySiteUpdate = useCallback((
-    data: Category[],
-    siteId: string,
-    updatedItem: NavigationSubItem,
-    targetCategoryId: string,
-    targetSubCategoryId?: string | null
-  ) => {
-    const nextData = cloneNavigationData(data)
-    const sourceLocation = findSiteLocation(nextData, siteId)
-    const targetCategoryIndex = nextData.findIndex(category => category.id === targetCategoryId)
-    if (!sourceLocation || targetCategoryIndex < 0) return data
-
-    const normalizedTargetSubCategoryId = targetSubCategoryId && targetSubCategoryId !== 'none'
-      ? targetSubCategoryId
-      : undefined
-    const targetSubCategoryIndex = normalizedTargetSubCategoryId
-      ? nextData[targetCategoryIndex].subCategories?.findIndex(
-        subCategory => subCategory.id === normalizedTargetSubCategoryId
-      )
-      : undefined
-    if (
-      normalizedTargetSubCategoryId &&
-      (targetSubCategoryIndex === undefined || targetSubCategoryIndex < 0)
-    ) {
-      return data
-    }
-
-    const sourceItems = sourceLocation.subCategoryIndex === undefined
-      ? nextData[sourceLocation.categoryIndex].items
-      : nextData[sourceLocation.categoryIndex]
-        .subCategories![sourceLocation.subCategoryIndex].items
-    const staysInSameLocation =
-      sourceLocation.categoryIndex === targetCategoryIndex &&
-      sourceLocation.subCategoryIndex === targetSubCategoryIndex
-
-    if (staysInSameLocation) {
-      sourceItems[sourceLocation.itemIndex] = updatedItem
-    } else {
-      sourceItems.splice(sourceLocation.itemIndex, 1)
-      const targetItems = targetSubCategoryIndex === undefined
-        ? nextData[targetCategoryIndex].items
-        : nextData[targetCategoryIndex].subCategories![targetSubCategoryIndex].items
-      targetItems.push(updatedItem)
-    }
-
-    return nextData
-  }, [cloneNavigationData, findSiteLocation])
-
-  const removeSitesFromNavigationData = useCallback((data: Category[], siteIds: string[]) => {
-    const selectedIds = new Set(siteIds)
-    return cloneNavigationData(data).map(category => ({
-      ...category,
-      items: category.items.filter(item => !selectedIds.has(item.id)),
-      subCategories: category.subCategories?.map(subCategory => ({
-        ...subCategory,
-        items: subCategory.items.filter(item => !selectedIds.has(item.id)),
-      })),
-    }))
-  }, [cloneNavigationData])
-
-  const addSiteToNavigationData = useCallback((
-    data: Category[],
-    item: NavigationSubItem,
-    categoryId: string,
-    subCategoryId?: string | null
-  ) => {
-    const nextData = cloneNavigationData(data)
-    const category = nextData.find(currentCategory => currentCategory.id === categoryId)
-    if (!category) return data
-
-    if (subCategoryId && subCategoryId !== 'none') {
-      const subCategory = category.subCategories?.find(current => current.id === subCategoryId)
-      if (!subCategory) return data
-      subCategory.items.push(item)
-    } else {
-      category.items.push(item)
-    }
-    return nextData
-  }, [cloneNavigationData])
+  }, [fetchSites, hasAppliedUrlFilter])
 
   // 获取站点所属的分类
   const getSiteCategory = (siteId: string): string => {
@@ -434,8 +334,12 @@ export default function SiteListPage() {
     }
   }
 
-  const getSortItems = useCallback((categoryId: string, subCategoryId: string): NavigationSubItem[] => {
-    const category = navigationData.find((item) => item.id === categoryId)
+  const getSortItemsFromData = useCallback((
+    data: Category[],
+    categoryId: string,
+    subCategoryId: string
+  ): NavigationSubItem[] => {
+    const category = data.find((item) => item.id === categoryId)
     if (!category) return []
 
     if (subCategoryId === 'none') {
@@ -444,13 +348,34 @@ export default function SiteListPage() {
 
     const subCategory = category.subCategories?.find((item) => item.id === subCategoryId)
     return [...(subCategory?.items || [])]
-  }, [navigationData])
+  }, [])
 
-  const syncSortItems = useCallback((categoryId: string, subCategoryId: string) => {
-    const scopedItems = getSortItems(categoryId, subCategoryId)
-    setSortItems(scopedItems)
-    setSortOriginalItemIds(scopedItems.map((item) => item.id))
-  }, [getSortItems])
+  const syncSortItems = useCallback(async (categoryId: string, subCategoryId: string) => {
+    if (!categoryId) {
+      setSortItems([])
+      setSortOriginalItemIds([])
+      return
+    }
+
+    setIsSortLoading(true)
+    try {
+      const data = await loadSiteList(categoryId, subCategoryId)
+      const scopedItems = getSortItemsFromData(data.navigationItems || [], categoryId, subCategoryId)
+      setSortItems(scopedItems)
+      setSortOriginalItemIds(scopedItems.map((item) => item.id))
+    } catch (error) {
+      console.error('Fetch sort items error:', error)
+      setSortItems([])
+      setSortOriginalItemIds([])
+      toast({
+        title: "错误",
+        description: "加载排序数据失败",
+        variant: "destructive"
+      })
+    } finally {
+      setIsSortLoading(false)
+    }
+  }, [getSortItemsFromData, loadSiteList, toast])
 
   const getInitialSortScope = useCallback(() => {
     const firstCategoryWithSites = navigationData.find((category) =>
@@ -491,19 +416,19 @@ export default function SiteListPage() {
     const { categoryId, subCategoryId } = getInitialSortScope()
     setSortCategoryId(categoryId)
     setSortSubCategoryId(subCategoryId)
-    syncSortItems(categoryId, subCategoryId)
+    void syncSortItems(categoryId, subCategoryId)
     setShowSortDialog(true)
   }
 
   const handleSortCategoryChange = (categoryId: string) => {
     setSortCategoryId(categoryId)
     setSortSubCategoryId('none')
-    syncSortItems(categoryId, 'none')
+    void syncSortItems(categoryId, 'none')
   }
 
   const handleSortSubCategoryChange = (subCategoryId: string) => {
     setSortSubCategoryId(subCategoryId)
-    syncSortItems(sortCategoryId, subCategoryId)
+    void syncSortItems(sortCategoryId, subCategoryId)
   }
 
   const moveSortItem = (fromIndex: number, toIndex: number) => {
@@ -526,30 +451,10 @@ export default function SiteListPage() {
   }
 
   const handleSaveSort = async () => {
-    if (!sortCategoryId || isSortSaving) return
+    if (!sortCategoryId || isSortSaving || isSortLoading) return
 
     setIsSortSaving(true)
     try {
-      const updatedNavigationData = navigationData.map((category) => {
-        if (category.id !== sortCategoryId) return category
-
-        if (sortSubCategoryId === 'none') {
-          return {
-            ...category,
-            items: sortItems
-          }
-        }
-
-        return {
-          ...category,
-          subCategories: category.subCategories?.map((subCategory) =>
-            subCategory.id === sortSubCategoryId
-              ? { ...subCategory, items: sortItems }
-              : subCategory
-          )
-        }
-      })
-
       const response = await fetch('/api/navigation/sites', {
         method: 'PUT',
         headers: {
@@ -563,8 +468,7 @@ export default function SiteListPage() {
       })
       await readMutationResponse(response, '保存排序失败')
 
-      setNavigationData(updatedNavigationData)
-      setSites(extractSites(updatedNavigationData))
+      await fetchSites()
       setSortOriginalItemIds(sortItems.map((item) => item.id))
       setShowSortDialog(false)
 
@@ -674,12 +578,7 @@ export default function SiteListPage() {
         response,
         '批量删除失败'
       )
-      const updatedNavigationData = removeSitesFromNavigationData(
-        navigationData,
-        result.deletedIds
-      )
-      setNavigationData(updatedNavigationData)
-      setSites(extractSites(updatedNavigationData))
+      await fetchSites()
 
       toast({
         title: "成功",
@@ -731,19 +630,12 @@ export default function SiteListPage() {
           targetSubCategoryId: newSite.subCategoryId || null,
         }),
       })
-      const result = await readMutationResponse<{
+      await readMutationResponse<{
         item: NavigationSubItem
         targetCategoryId: string
         targetSubCategoryId?: string
       }>(response, '添加站点失败')
-      const updatedNavigationData = addSiteToNavigationData(
-        navigationData,
-        result.item,
-        result.targetCategoryId,
-        result.targetSubCategoryId
-      )
-      setNavigationData(updatedNavigationData)
-      setSites(extractSites(updatedNavigationData))
+      await fetchSites()
 
       toast({
         title: "成功",
@@ -817,15 +709,7 @@ export default function SiteListPage() {
         throw new Error(result?.error || 'Failed to save')
       }
 
-      const updatedNavigationData = applySiteUpdate(
-        navigationData,
-        editingSite.id,
-        result.item,
-        editSite.categoryId,
-        editSite.subCategoryId
-      )
-      setNavigationData(updatedNavigationData)
-      setSites(extractSites(updatedNavigationData))
+      await fetchSites()
 
       toast({
         title: "成功",
@@ -916,16 +800,11 @@ export default function SiteListPage() {
         `/api/navigation/sites/${encodeURIComponent(deletingSite.id)}`,
         { method: 'DELETE' }
       )
-      const result = await readMutationResponse<{ deletedIds: string[] }>(
+      await readMutationResponse<{ deletedIds: string[] }>(
         response,
         '删除站点失败'
       )
-      const updatedNavigationData = removeSitesFromNavigationData(
-        navigationData,
-        result.deletedIds
-      )
-      setNavigationData(updatedNavigationData)
-      setSites(extractSites(updatedNavigationData))
+      await fetchSites()
 
       toast({
         title: "成功",
@@ -1159,8 +1038,7 @@ export default function SiteListPage() {
   }
 
   const handleBatchBooleanUpdate = async (
-    operation: 'enable' | 'disable' | 'private' | 'public',
-    patch: Pick<NavigationSubItem, 'enabled'> | Pick<NavigationSubItem, 'isPrivate'>
+    operation: 'enable' | 'disable' | 'private' | 'public'
   ) => {
     if (selectedSites.length === 0 || batchOperation) return
 
@@ -1175,30 +1053,8 @@ export default function SiteListPage() {
         updatedIds: string[]
         updatedCount: number
       }>(response, `批量${getBatchOperationLabel(operation)}失败`)
-      const updatedNavigationData = cloneNavigationData(navigationData)
-      const updatedIds = new Set(result.updatedIds)
-
-      for (const siteId of updatedIds) {
-        const location = findSiteLocation(updatedNavigationData, siteId)
-        if (!location) continue
-
-        const item = getItemAtLocation(updatedNavigationData, location)
-        const nextItem = { ...item, ...patch }
-
-        if (
-          nextItem.enabled !== item.enabled ||
-          nextItem.isPrivate !== item.isPrivate
-        ) {
-          if (location.subCategoryIndex !== undefined) {
-            updatedNavigationData[location.categoryIndex].subCategories![location.subCategoryIndex].items[location.itemIndex] = nextItem
-          } else {
-            updatedNavigationData[location.categoryIndex].items[location.itemIndex] = nextItem
-          }
-        }
-      }
       if (result.updatedCount > 0) {
-        setNavigationData(updatedNavigationData)
-        setSites(extractSites(updatedNavigationData))
+        await fetchSites()
       }
 
       toast({
@@ -1248,56 +1104,7 @@ export default function SiteListPage() {
         updatedIds: string[]
         updatedCount: number
       }>(response, '批量移动分类失败')
-      const updatedNavigationData = cloneNavigationData(navigationData)
-      const targetCategoryIndex = updatedNavigationData.findIndex((category) => category.id === batchMoveCategoryId)
-      if (targetCategoryIndex === -1) {
-        throw new Error('目标分类不存在')
-      }
-
-      let targetSubCategoryIndex: number | undefined
-      if (batchMoveSubCategoryId !== 'none') {
-        const subCategoryIndex = updatedNavigationData[targetCategoryIndex].subCategories?.findIndex(
-          (subCategory) => subCategory.id === batchMoveSubCategoryId
-        ) ?? -1
-
-        if (subCategoryIndex === -1) {
-          throw new Error('目标子分类不存在')
-        }
-
-        targetSubCategoryIndex = subCategoryIndex
-      }
-
-      const movedItems: NavigationSubItem[] = []
-
-      for (const siteId of result.updatedIds) {
-        const location = findSiteLocation(updatedNavigationData, siteId)
-        if (!location) continue
-
-        if (location.subCategoryIndex !== undefined) {
-          const [item] = updatedNavigationData[location.categoryIndex].subCategories![location.subCategoryIndex].items.splice(location.itemIndex, 1)
-          movedItems.push(item)
-        } else {
-          const [item] = updatedNavigationData[location.categoryIndex].items.splice(location.itemIndex, 1)
-          movedItems.push(item)
-        }
-      }
-
-      if (movedItems.length === 0) {
-        throw new Error('没有找到可移动的站点')
-      }
-
-      if (targetSubCategoryIndex !== undefined) {
-        const targetItems = updatedNavigationData[targetCategoryIndex].subCategories![targetSubCategoryIndex].items || []
-        updatedNavigationData[targetCategoryIndex].subCategories![targetSubCategoryIndex].items = [...targetItems, ...movedItems]
-      } else {
-        updatedNavigationData[targetCategoryIndex].items = [
-          ...(updatedNavigationData[targetCategoryIndex].items || []),
-          ...movedItems,
-        ]
-      }
-
-      setNavigationData(updatedNavigationData)
-      setSites(extractSites(updatedNavigationData))
+      await fetchSites()
 
       toast({
         title: "成功",
@@ -1335,6 +1142,9 @@ export default function SiteListPage() {
             <div className="flex items-center gap-2 mb-2">
               <span className="text-sm text-muted-foreground">
                 共 {sites.length} 个站点
+                {totalSiteCount > sites.length && (
+                  <span>，全站 {totalSiteCount} 个</span>
+                )}
                 {filteredSites.length !== sites.length && (
                   <span>，显示 {filteredSites.length} 个</span>
                 )}
@@ -1364,6 +1174,7 @@ export default function SiteListPage() {
                 onValueChange={(value) => {
                   setCategoryFilter(value)
                   setSubCategoryFilter('all') // 重置子分类筛选
+                  setSelectedSites([])
                 }}
               >
                 <SelectTrigger className="w-full sm:w-[200px]">
@@ -1381,7 +1192,10 @@ export default function SiteListPage() {
               {/* 子分类筛选器 */}
               <Select
                 value={subCategoryFilter}
-                onValueChange={setSubCategoryFilter}
+                onValueChange={(value) => {
+                  setSubCategoryFilter(value)
+                  setSelectedSites([])
+                }}
               >
                 <SelectTrigger className="w-full sm:w-[200px]">
                   <SelectValue placeholder="按子分类筛选" />
@@ -1683,7 +1497,7 @@ export default function SiteListPage() {
             </Dialog>
 
             <Dialog open={showSortDialog} onOpenChange={(open) => {
-              if (!open && !isSortSaving) {
+              if (!open && !isSortSaving && !isSortLoading) {
                 setShowSortDialog(false)
               }
             }}>
@@ -1698,7 +1512,7 @@ export default function SiteListPage() {
                       <Select
                         value={sortCategoryId}
                         onValueChange={handleSortCategoryChange}
-                        disabled={isSortSaving}
+                        disabled={isSortSaving || isSortLoading}
                       >
                         <SelectTrigger id="sort-category">
                           <SelectValue placeholder="选择一级分类" />
@@ -1717,7 +1531,7 @@ export default function SiteListPage() {
                       <Select
                         value={sortSubCategoryId}
                         onValueChange={handleSortSubCategoryChange}
-                        disabled={!sortCategoryId || isSortSaving}
+                        disabled={!sortCategoryId || isSortSaving || isSortLoading}
                       >
                         <SelectTrigger id="sort-subcategory">
                           <SelectValue placeholder="选择排序范围" />
@@ -1750,7 +1564,12 @@ export default function SiteListPage() {
                       </span>
                     </div>
 
-                    {sortItems.length > 0 ? (
+                    {isSortLoading ? (
+                      <div className="flex min-h-[180px] items-center justify-center px-4 py-8 text-center text-sm text-muted-foreground">
+                        <Icons.loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        正在加载排序数据...
+                      </div>
+                    ) : sortItems.length > 0 ? (
                       <div className="max-h-[420px] divide-y overflow-y-auto">
                         {sortItems.map((item, index) => (
                           <div key={item.id} className="flex items-center gap-3 px-3 py-2">
@@ -1801,7 +1620,7 @@ export default function SiteListPage() {
                                 size="icon"
                                 className="h-8 w-8"
                                 title="置顶"
-                                disabled={index === 0 || isSortSaving}
+                                disabled={index === 0 || isSortSaving || isSortLoading}
                                 onClick={() => moveSortItem(index, 0)}
                               >
                                 <Icons.chevronsUp className="h-4 w-4" />
@@ -1812,7 +1631,7 @@ export default function SiteListPage() {
                                 size="icon"
                                 className="h-8 w-8"
                                 title="上移"
-                                disabled={index === 0 || isSortSaving}
+                                disabled={index === 0 || isSortSaving || isSortLoading}
                                 onClick={() => moveSortItem(index, index - 1)}
                               >
                                 <Icons.arrowUp className="h-4 w-4" />
@@ -1823,7 +1642,7 @@ export default function SiteListPage() {
                                 size="icon"
                                 className="h-8 w-8"
                                 title="下移"
-                                disabled={index === sortItems.length - 1 || isSortSaving}
+                                disabled={index === sortItems.length - 1 || isSortSaving || isSortLoading}
                                 onClick={() => moveSortItem(index, index + 1)}
                               >
                                 <Icons.arrowDown className="h-4 w-4" />
@@ -1834,7 +1653,7 @@ export default function SiteListPage() {
                                 size="icon"
                                 className="h-8 w-8"
                                 title="置底"
-                                disabled={index === sortItems.length - 1 || isSortSaving}
+                                disabled={index === sortItems.length - 1 || isSortSaving || isSortLoading}
                                 onClick={() => moveSortItem(index, sortItems.length - 1)}
                               >
                                 <Icons.chevronsDown className="h-4 w-4" />
@@ -1855,13 +1674,13 @@ export default function SiteListPage() {
                     type="button"
                     variant="outline"
                     onClick={() => setShowSortDialog(false)}
-                    disabled={isSortSaving}
+                    disabled={isSortSaving || isSortLoading}
                   >
                     取消
                   </Button>
                   <Button
                     onClick={handleSaveSort}
-                    disabled={!hasSortChanges || isSortSaving}
+                    disabled={!hasSortChanges || isSortSaving || isSortLoading}
                   >
                     {isSortSaving && (
                       <Icons.loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -2117,7 +1936,7 @@ export default function SiteListPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => handleBatchBooleanUpdate('enable', { enabled: true })}
+                onClick={() => handleBatchBooleanUpdate('enable')}
                 disabled={isBatchWorking}
                 className="border-blue-200 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:text-blue-100 dark:hover:bg-blue-900/40"
               >
@@ -2131,7 +1950,7 @@ export default function SiteListPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => handleBatchBooleanUpdate('disable', { enabled: false })}
+                onClick={() => handleBatchBooleanUpdate('disable')}
                 disabled={isBatchWorking}
                 className="border-blue-200 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:text-blue-100 dark:hover:bg-blue-900/40"
               >
@@ -2159,7 +1978,7 @@ export default function SiteListPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => handleBatchBooleanUpdate('private', { isPrivate: true })}
+                onClick={() => handleBatchBooleanUpdate('private')}
                 disabled={isBatchWorking}
                 className="border-blue-200 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:text-blue-100 dark:hover:bg-blue-900/40"
               >
@@ -2173,7 +1992,7 @@ export default function SiteListPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => handleBatchBooleanUpdate('public', { isPrivate: false })}
+                onClick={() => handleBatchBooleanUpdate('public')}
                 disabled={isBatchWorking}
                 className="border-blue-200 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:text-blue-100 dark:hover:bg-blue-900/40"
               >

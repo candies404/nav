@@ -27,6 +27,11 @@ export type BatchSiteOperation =
   | 'public'
   | 'move'
 
+export type ListSitesInput = {
+  categoryId?: string | null
+  subCategoryId?: string | null
+}
+
 type SiteLocation = {
   categoryIndex: number
   subCategoryIndex?: number
@@ -252,6 +257,55 @@ export async function reorderNavigationSites(input: {
   return { orderedSiteIds: orderedIds, ...result }
 }
 
+export async function listNavigationSites(input: ListSitesInput = {}) {
+  const data = await loadNavigationData()
+  const categoryId = normalizeOptionalId(input.categoryId)
+  const subCategoryId = normalizeSubCategoryId(input.subCategoryId)
+  const filterMainItemsOnly = input.subCategoryId === 'none'
+  const totalSiteCount = countSites(data)
+  let siteCount = 0
+
+  const navigationItems = data.navigationItems.map(category => {
+    const matchesCategory = !categoryId || category.id === categoryId
+    const items = matchesCategory && !subCategoryId
+      ? [...(category.items || [])]
+      : matchesCategory && filterMainItemsOnly
+        ? [...(category.items || [])]
+        : []
+
+    siteCount += items.length
+
+    return {
+      id: category.id,
+      title: category.title,
+      icon: category.icon,
+      items,
+      subCategories: category.subCategories?.map(subCategory => {
+        const matchesSubCategory = matchesCategory &&
+          !filterMainItemsOnly &&
+          (!subCategoryId || subCategory.id === subCategoryId)
+        const subItems = matchesSubCategory ? [...(subCategory.items || [])] : []
+        siteCount += subItems.length
+
+        return {
+          id: subCategory.id,
+          title: subCategory.title,
+          icon: subCategory.icon,
+          items: subItems,
+        }
+      }) || [],
+    }
+  })
+
+  return {
+    navigationItems,
+    totalSiteCount,
+    siteCount,
+    categoryId,
+    subCategoryId: filterMainItemsOnly ? 'none' : subCategoryId,
+  }
+}
+
 async function loadNavigationData() {
   return getFileContent(
     NAVIGATION_PATH,
@@ -295,7 +349,11 @@ function normalizeSiteIds(siteIds: string[]) {
 }
 
 function normalizeSubCategoryId(value?: string | null) {
-  return !value || value === 'none' ? undefined : value
+  return !value || value === 'none' || value === 'all' ? undefined : value
+}
+
+function normalizeOptionalId(value?: string | null) {
+  return !value || value === 'all' ? undefined : value
 }
 
 function pickSitePatch(update: SitePatch) {
@@ -448,4 +506,14 @@ function forEachSite(
       if (subCategory.items) subCategory.items = subCategory.items.map(updater)
     }
   }
+}
+
+function countSites(data: NavigationData) {
+  return data.navigationItems.reduce((total, category) => {
+    const subCategoryCount = (category.subCategories || []).reduce(
+      (sum, subCategory) => sum + (subCategory.items?.length || 0),
+      0
+    )
+    return total + (category.items?.length || 0) + subCategoryCount
+  }, 0)
 }

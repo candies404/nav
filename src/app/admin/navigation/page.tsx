@@ -54,7 +54,7 @@ export default function NavigationPage() {
   const { toast } = useToast()
 
   const { data: items = [], error, isLoading, mutate } = useSWR<NavigationItem[]>(
-    '/api/navigation',
+    '/api/navigation?view=summary',
     fetcher,
     {
       fallbackData: [],
@@ -84,10 +84,7 @@ export default function NavigationPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          navigationItems: [
-            ...items,  // 保留现有的导航项
-            newItem    // 添加新的导航项
-          ]
+          item: newItem
         })
       })
 
