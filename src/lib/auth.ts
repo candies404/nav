@@ -61,4 +61,5 @@ const config = {
 const handler = NextAuth(config)
 
 export const auth = handler.auth
+export const signIn = handler.signIn
 export const { handlers: { GET, POST } } = handler
