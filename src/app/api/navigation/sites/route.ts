@@ -22,6 +22,11 @@ export async function GET(request: Request) {
     const result = await getAdminNavigationSites({
       categoryId: searchParams.get('categoryId'),
       subCategoryId: searchParams.get('subCategoryId'),
+      query: searchParams.get('query'),
+      status: searchParams.get('status'),
+      page: readPositiveInteger(searchParams.get('page')),
+      pageSize: readPositiveInteger(searchParams.get('pageSize')),
+      all: searchParams.get('all') === '1',
       fresh: searchParams.get('fresh') === '1',
     })
 
@@ -38,6 +43,12 @@ export async function GET(request: Request) {
       { status: 500 }
     )
   }
+}
+
+function readPositiveInteger(value: string | null) {
+  if (!value) return undefined
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
 }
 
 export async function POST(request: Request) {

@@ -1,7 +1,7 @@
 'use client'
 
 import Image from "next/image"
-import { useState } from "react"
+import { useCallback, useDeferredValue, useEffect, useRef, useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
@@ -48,6 +48,8 @@ import {
   fileToDataUrl,
   listResources,
   type ResourceCardResource,
+  type ResourceKind,
+  type ResourceListPage,
   type ResourceReferenceMap,
   uploadResourceImageWithProgress,
 } from "@/services/resource-api"
@@ -132,10 +134,10 @@ if (typeof document !== 'undefined') {
 }
 
 export function ResourceManagementClient({
-  initialResources,
+  initialData,
   initialError,
 }: {
-  initialResources: ResourceCardResource[]
+  initialData: ResourceListPage
   initialError: string | null
 }) {
   const { toast } = useToast()
@@ -148,7 +150,7 @@ export function ResourceManagementClient({
     },
   })
 
-  const [resources, setResources] = useState<ResourceCardResource[]>(initialResources);
+  const [resources, setResources] = useState<ResourceCardResource[]>(initialData.resources);
   const [error, setError] = useState<string | null>(initialError);
   const [isDialogOpen, setIsDialogOpen] = useState(false); // State to control dialog visibility
   const [uploadProgress, setUploadProgress] = useState(0); // State to track upload progress
@@ -160,29 +162,63 @@ export function ResourceManagementClient({
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null); // 新增文件状态
   const [searchQuery, setSearchQuery] = useState("");
+  const deferredSearchQuery = useDeferredValue(searchQuery)
+  const [resourceKind, setResourceKind] = useState<ResourceKind>(initialData.kind)
+  const [currentPage, setCurrentPage] = useState(initialData.page)
+  const [pageSize, setPageSize] = useState(initialData.pageSize)
+  const [totalResources, setTotalResources] = useState(initialData.total)
+  const [filteredResourceCount, setFilteredResourceCount] = useState(initialData.filteredTotal)
+  const [totalPages, setTotalPages] = useState(initialData.totalPages)
+  const [manualResourceCount, setManualResourceCount] = useState(initialData.manualCount)
+  const [cachedIconCount, setCachedIconCount] = useState(initialData.cachedCount)
   const [selectedResources, setSelectedResources] = useState<Set<string>>(new Set());
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [resourceReferences, setResourceReferences] = useState<ResourceReferenceMap>({});
+  const skipInitialResourceFetchRef = useRef(true)
+  const requestSequenceRef = useRef(0)
 
-  const manualResourceCount = resources.filter((resource) => !isAutoCachedIcon(resource)).length;
-  const cachedIconCount = resources.length - manualResourceCount;
-
-  const fetchResources = async () => {
+  const fetchResources = useCallback(async (fresh = true) => {
+    const requestSequence = ++requestSequenceRef.current
     try {
       setIsLoading(true);
       setError(null);
-      setResources(await listResources({ fresh: true }));
+      const data = await listResources({
+        fresh,
+        page: currentPage,
+        pageSize,
+        query: deferredSearchQuery,
+        kind: resourceKind,
+      })
+      if (requestSequence !== requestSequenceRef.current) return
+
+      setResources(data.resources)
+      setCurrentPage(data.page)
+      setTotalResources(data.total)
+      setFilteredResourceCount(data.filteredTotal)
+      setTotalPages(data.totalPages)
+      setManualResourceCount(data.manualCount)
+      setCachedIconCount(data.cachedCount)
     } catch (error) {
+      if (requestSequence !== requestSequenceRef.current) return
       if (error instanceof Error) {
         setError(error.message);
       } else {
         setError('图片资源加载失败');
       }
     } finally {
-      setIsLoading(false);
+      if (requestSequence === requestSequenceRef.current) setIsLoading(false);
     }
-  };
+  }, [currentPage, deferredSearchQuery, pageSize, resourceKind]);
+
+  useEffect(() => {
+    if (skipInitialResourceFetchRef.current) {
+      skipInitialResourceFetchRef.current = false
+      return
+    }
+
+    void fetchResources(false)
+  }, [fetchResources])
 
   async function onSubmit() {
     try {
@@ -312,13 +348,7 @@ export function ResourceManagementClient({
   };
 
   // 添加搜索过滤函数
-  const filteredResources = resources.filter((resource) => {
-    const item = resource.items[0]
-    const query = searchQuery.toLowerCase()
-
-    return item.url.toLowerCase().includes(query) ||
-      (item.pathname || '').toLowerCase().includes(query)
-  });
+  const filteredResources = resources
 
   // 批量选择相关函数
   const toggleResourceSelection = (resourceId: string) => {
@@ -496,10 +526,30 @@ export function ResourceManagementClient({
                 <Input
                   placeholder="搜索图片资源..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value)
+                    setCurrentPage(1)
+                    setSelectedResources(new Set())
+                  }}
                   className="w-full pl-10 sm:max-w-md"
                 />
               </div>
+
+              <select
+                aria-label="资源类型"
+                value={resourceKind}
+                onChange={(event) => {
+                  const value = event.target.value as ResourceKind
+                  setResourceKind(value)
+                  setCurrentPage(1)
+                  setSelectedResources(new Set())
+                }}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:w-[160px]"
+              >
+                <option value="all">全部资源</option>
+                <option value="manual">手动资源</option>
+                <option value="cached">自动图标</option>
+              </select>
 
               {filteredResources.length > 0 && (
                 <div className="flex flex-col gap-2 min-[520px]:flex-row min-[520px]:items-center">
@@ -514,7 +564,7 @@ export function ResourceManagementClient({
                     ) : (
                       <Icons.square className="h-4 w-4" />
                     )}
-                    全选图片资源 ({selectedResources.size}/{filteredResources.length})
+                    全选本页 ({selectedResources.size}/{filteredResources.length})
                   </Button>
 
                   {selectedResources.size > 0 && (
@@ -534,7 +584,7 @@ export function ResourceManagementClient({
           </div>
 
           <div className="text-xs text-muted-foreground">
-            当前显示：全部图片资源，包含手动上传资源和自动缓存图标
+            当前匹配 {filteredResourceCount} 个，共 {totalResources} 个图片资源；本页显示 {resources.length} 个
           </div>
 
           {/* 添加搜索框 */}
@@ -560,7 +610,7 @@ export function ResourceManagementClient({
 
               return (
                 <div
-                  key={index}
+                  key={resource.id}
                   className={`group bg-white rounded-lg border shadow-sm hover:shadow-md transition-all duration-200 ${selectedResources.has(resource.id) ? 'ring-2 ring-blue-500 border-blue-500' : ''
                     }`}
                 >
@@ -589,6 +639,8 @@ export function ResourceManagementClient({
                       alt={`图片资源 ${index + 1}`}
                       fill
                       unoptimized
+                      loading="lazy"
+                      decoding="async"
                       sizes="(min-width: 1024px) 160px, (min-width: 640px) 25vw, 50vw"
                       className="rounded-t-lg object-cover"
                     />
@@ -638,9 +690,9 @@ export function ResourceManagementClient({
           <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed rounded-lg bg-muted/50">
             <Icons.inbox className="h-10 w-10 text-gray-400 mb-2" />
             <p className="text-gray-500">
-              {searchQuery ? '未找到匹配的图片资源' : '暂无图片资源'}
+              {totalResources > 0 ? '未找到匹配的图片资源' : '暂无图片资源'}
             </p>
-            {!searchQuery && (
+            {totalResources === 0 && (
               <Button
                 variant="outline"
                 onClick={() => setIsDialogOpen(true)}
@@ -649,6 +701,57 @@ export function ResourceManagementClient({
                 上传第一个手动资源
               </Button>
             )}
+          </div>
+        )}
+
+        {!isLoading && filteredResourceCount > 0 && (
+          <div className="flex flex-col gap-3 rounded-md border bg-background px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-muted-foreground">
+              第 {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filteredResourceCount)} 个资源
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                aria-label="每页显示数量"
+                value={String(pageSize)}
+                onChange={(event) => {
+                  setPageSize(Number(event.target.value))
+                  setCurrentPage(1)
+                  setSelectedResources(new Set())
+                }}
+                className="h-8 w-[112px] rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="20">每页 20 个</option>
+                <option value="40">每页 40 个</option>
+                <option value="80">每页 80 个</option>
+              </select>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={currentPage <= 1}
+                onClick={() => {
+                  setCurrentPage(page => Math.max(1, page - 1))
+                  setSelectedResources(new Set())
+                }}
+              >
+                上一页
+              </Button>
+              <span className="min-w-16 text-center text-sm">
+                {currentPage} / {totalPages}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={currentPage >= totalPages}
+                onClick={() => {
+                  setCurrentPage(page => Math.min(totalPages, page + 1))
+                  setSelectedResources(new Set())
+                }}
+              >
+                下一页
+              </Button>
+            </div>
           </div>
         )}
       </div>

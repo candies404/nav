@@ -1,7 +1,7 @@
 'use client'
 
 import Image from 'next/image'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from "@/registry/new-york/ui/button"
 import { useToast } from "@/registry/new-york/hooks/use-toast"
 import { Icons } from "@/components/icons"
@@ -86,6 +86,9 @@ type SiteListResponse = {
   navigationItems: Category[]
   totalSiteCount?: number
   siteCount?: number
+  page?: number
+  pageSize?: number
+  totalPages?: number
 }
 
 async function readMutationResponse<T>(response: Response, fallbackMessage: string): Promise<T> {
@@ -136,14 +139,18 @@ export function SiteListClient({
   initialData,
   initialCategoryId,
   initialSubCategoryId,
+  initialQuery,
+  initialStatus,
 }: {
   initialData: SiteListResponse
   initialCategoryId: string
   initialSubCategoryId: string
+  initialQuery: string
+  initialStatus: string
 }) {
   const { toast } = useToast()
   const [sites, setSites] = useState<Site[]>(() => extractSites(initialData.navigationItems || []))
-  const [searchQuery, setSearchQuery] = useState("")
+  const [searchQuery, setSearchQuery] = useState(initialQuery)
   const [isLoading, setIsLoading] = useState(false)
   const [selectedSites, setSelectedSites] = useState<string[]>([])
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
@@ -153,9 +160,16 @@ export function SiteListClient({
   const [editingSite, setEditingSite] = useState<Site | null>(null)
   const [navigationData, setNavigationData] = useState<Category[]>(initialData.navigationItems || [])
   const [totalSiteCount, setTotalSiteCount] = useState(initialData.totalSiteCount ?? initialData.siteCount ?? 0)
+  const [resultSiteCount, setResultSiteCount] = useState(initialData.siteCount ?? 0)
+  const [currentPage, setCurrentPage] = useState(initialData.page ?? 1)
+  const [pageSize, setPageSize] = useState(initialData.pageSize ?? 25)
+  const [totalPages, setTotalPages] = useState(initialData.totalPages ?? 1)
   const [categoryFilter, setCategoryFilter] = useState<string>(initialCategoryId)
   const [subCategoryFilter, setSubCategoryFilter] = useState<string>(initialSubCategoryId)
-  const [statusFilter, setStatusFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'enabled' | 'disabled'>(
+    initialStatus === 'enabled' || initialStatus === 'disabled' ? initialStatus : 'all'
+  )
+  const deferredSearchQuery = useDeferredValue(searchQuery)
   const [showSortDialog, setShowSortDialog] = useState(false)
   const [sortCategoryId, setSortCategoryId] = useState('')
   const [sortSubCategoryId, setSortSubCategoryId] = useState('none')
@@ -182,6 +196,7 @@ export function SiteListClient({
   const lastFetchedEditUrl = useRef<string>('')
   const isFetchingAddMetadataRef = useRef(false)
   const isFetchingEditMetadataRef = useRef(false)
+  const siteRequestSequenceRef = useRef(0)
   const [newSite, setNewSite] = useState({
     name: '',
     url: '',
@@ -206,12 +221,24 @@ export function SiteListClient({
   const loadSiteList = useCallback(async (
     categoryId: string,
     subCategoryId: string,
-    fresh = false
+    options: {
+      fresh?: boolean
+      page?: number
+      pageSize?: number
+      query?: string
+      status?: 'all' | 'enabled' | 'disabled'
+      all?: boolean
+    } = {}
   ): Promise<SiteListResponse> => {
     const searchParams = new URLSearchParams()
     if (categoryId !== 'all') searchParams.set('categoryId', categoryId)
     if (subCategoryId !== 'all') searchParams.set('subCategoryId', subCategoryId)
-    if (fresh) searchParams.set('fresh', '1')
+    if (options.query) searchParams.set('query', options.query)
+    if (options.status && options.status !== 'all') searchParams.set('status', options.status)
+    if (options.page) searchParams.set('page', String(options.page))
+    if (options.pageSize) searchParams.set('pageSize', String(options.pageSize))
+    if (options.all) searchParams.set('all', '1')
+    if (options.fresh) searchParams.set('fresh', '1')
     const queryString = searchParams.toString()
     const response = await fetch(`/api/navigation/sites${queryString ? `?${queryString}` : ''}`)
     if (!response.ok) throw new Error('Failed to fetch')
@@ -219,19 +246,31 @@ export function SiteListClient({
   }, [])
 
   const fetchSites = useCallback(async (fresh = true) => {
+    const requestSequence = ++siteRequestSequenceRef.current
     if (!isInitialLoadingRef.current) setIsLoading(true);
     try {
-      const data = await loadSiteList(categoryFilter, subCategoryFilter, fresh);
+      const data = await loadSiteList(categoryFilter, subCategoryFilter, {
+        fresh,
+        page: currentPage,
+        pageSize,
+        query: deferredSearchQuery,
+        status: statusFilter,
+      });
+      if (requestSequence !== siteRequestSequenceRef.current) return
       const navigationItems = data.navigationItems || []
 
       // Store navigation data for category selection
       setNavigationData(navigationItems);
       setTotalSiteCount(data.totalSiteCount ?? data.siteCount ?? 0)
+      setResultSiteCount(data.siteCount ?? 0)
+      setCurrentPage(data.page ?? currentPage)
+      setTotalPages(data.totalPages ?? 1)
 
       // Extract all sites from the navigation structure
       const allSites = extractSites(navigationItems);
       setSites(allSites);
     } catch (error) {
+      if (requestSequence !== siteRequestSequenceRef.current) return
       console.error('Fetch error:', error);
       toast({
         title: "错误",
@@ -241,12 +280,16 @@ export function SiteListClient({
       setSites([]);
       setNavigationData([]);
       setTotalSiteCount(0);
+      setResultSiteCount(0)
+      setTotalPages(1)
     } finally {
-      setIsLoading(false);
-      isInitialLoadingRef.current = false;
-      setIsInitialLoading(false);
+      if (requestSequence === siteRequestSequenceRef.current) {
+        setIsLoading(false);
+        isInitialLoadingRef.current = false;
+        setIsInitialLoading(false);
+      }
     }
-  }, [categoryFilter, loadSiteList, subCategoryFilter, toast]);
+  }, [categoryFilter, currentPage, deferredSearchQuery, loadSiteList, pageSize, statusFilter, subCategoryFilter, toast]);
 
   useEffect(() => {
     if (skipInitialFilterFetchRef.current) {
@@ -254,73 +297,50 @@ export function SiteListClient({
       return
     }
 
-    fetchSites(false)
+    void fetchSites(false)
   }, [fetchSites])
 
-  // 获取站点所属的分类
-  const getSiteCategory = (siteId: string): string => {
-    for (const category of navigationData) {
-      // 检查主分类的items
-      if (category.items?.some(item => item.id === siteId)) {
-        return category.id
-      }
-      // 检查子分类的items
-      if (category.subCategories) {
-        for (const subCategory of category.subCategories) {
-          if (subCategory.items?.some(item => item.id === siteId)) {
-            return category.id
-          }
-        }
-      }
-    }
-    return ''
-  }
+  const siteCategoryIndex = useMemo(() => {
+    const index = new Map<string, {
+      categoryId: string
+      categoryName: string
+      subCategoryId: string
+      subCategoryName: string
+    }>()
 
-  // 获取站点所属的子分类
-  const getSiteSubCategory = (siteId: string): string => {
     for (const category of navigationData) {
-      // 检查主分类的items - 如果在主分类中，返回空字符串表示无子分类
-      if (category.items?.some(item => item.id === siteId)) {
-        return ''
+      for (const item of category.items || []) {
+        index.set(item.id, {
+          categoryId: category.id,
+          categoryName: category.title,
+          subCategoryId: '',
+          subCategoryName: '',
+        })
       }
-      // 检查子分类的items
-      if (category.subCategories) {
-        for (const subCategory of category.subCategories) {
-          if (subCategory.items?.some(item => item.id === siteId)) {
-            return subCategory.id
-          }
+      for (const subCategory of category.subCategories || []) {
+        for (const item of subCategory.items || []) {
+          index.set(item.id, {
+            categoryId: category.id,
+            categoryName: category.title,
+            subCategoryId: subCategory.id,
+            subCategoryName: subCategory.title,
+          })
         }
       }
     }
-    return ''
-  }
+
+    return index
+  }, [navigationData])
+
+  // 获取站点所属的分类
+  const getSiteCategory = (siteId: string): string => siteCategoryIndex.get(siteId)?.categoryId || ''
 
   // 获取站点的分类信息（用于显示）
   const getSiteCategoryInfo = (siteId: string): { categoryName: string; subCategoryName: string } => {
-    for (const category of navigationData) {
-      // 检查主分类的items
-      if (category.items?.some(item => item.id === siteId)) {
-        return {
-          categoryName: category.title,
-          subCategoryName: ''
-        }
-      }
-      // 检查子分类的items
-      if (category.subCategories) {
-        for (const subCategory of category.subCategories) {
-          if (subCategory.items?.some(item => item.id === siteId)) {
-            return {
-              categoryName: category.title,
-              subCategoryName: subCategory.title
-            }
-          }
-        }
-      }
-    }
-    return {
-      categoryName: '',
-      subCategoryName: ''
-    }
+    const location = siteCategoryIndex.get(siteId)
+    return location
+      ? { categoryName: location.categoryName, subCategoryName: location.subCategoryName }
+      : { categoryName: '', subCategoryName: '' }
   }
 
   const getSortItemsFromData = useCallback((
@@ -348,7 +368,7 @@ export function SiteListClient({
 
     setIsSortLoading(true)
     try {
-      const data = await loadSiteList(categoryId, subCategoryId)
+      const data = await loadSiteList(categoryId, subCategoryId, { all: true })
       const scopedItems = getSortItemsFromData(data.navigationItems || [], categoryId, subCategoryId)
       setSortItems(scopedItems)
       setSortOriginalItemIds(scopedItems.map((item) => item.id))
@@ -477,24 +497,7 @@ export function SiteListClient({
     }
   }
 
-  const filteredSites = sites.filter(site => {
-    const matchesSearch = site.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      site.url.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      site.description?.toLowerCase().includes(searchQuery.toLowerCase())
-
-    const matchesCategory = categoryFilter === 'all' || getSiteCategory(site.id) === categoryFilter
-
-    const matchesSubCategory = subCategoryFilter === 'all' ||
-      (subCategoryFilter === 'none' && getSiteSubCategory(site.id) === '') ||
-      getSiteSubCategory(site.id) === subCategoryFilter
-
-    const matchesStatus =
-      statusFilter === 'all' ||
-      (statusFilter === 'enabled' && site.enabled !== false) ||
-      (statusFilter === 'disabled' && site.enabled === false)
-
-    return matchesSearch && matchesCategory && matchesSubCategory && matchesStatus
-  })
+  const filteredSites = sites
 
   // 键盘快捷键支持
   useEffect(() => {
@@ -1130,12 +1133,10 @@ export function SiteListClient({
           <div className="space-y-1">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-sm text-muted-foreground">
-                共 {sites.length} 个站点
-                {totalSiteCount > sites.length && (
-                  <span>，全站 {totalSiteCount} 个</span>
-                )}
-                {filteredSites.length !== sites.length && (
-                  <span>，显示 {filteredSites.length} 个</span>
+                共 {resultSiteCount} 个匹配站点
+                <span>，全站 {totalSiteCount} 个</span>
+                {resultSiteCount > 0 && (
+                  <span>，当前显示 {sites.length} 个</span>
                 )}
               </span>
             </div>
@@ -1144,7 +1145,11 @@ export function SiteListClient({
                 <Input
                   placeholder="搜索站点..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value)
+                    setCurrentPage(1)
+                    setSelectedSites([])
+                  }}
                   className="pr-8"
                 />
                 {searchQuery && (
@@ -1152,7 +1157,11 @@ export function SiteListClient({
                     variant="ghost"
                     size="sm"
                     className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 p-0 hover:bg-muted"
-                    onClick={() => setSearchQuery('')}
+                    onClick={() => {
+                      setSearchQuery('')
+                      setCurrentPage(1)
+                      setSelectedSites([])
+                    }}
                   >
                     <Icons.x className="h-3 w-3" />
                   </Button>
@@ -1163,6 +1172,7 @@ export function SiteListClient({
                 onValueChange={(value) => {
                   setCategoryFilter(value)
                   setSubCategoryFilter('all') // 重置子分类筛选
+                  setCurrentPage(1)
                   setSelectedSites([])
                 }}
               >
@@ -1183,6 +1193,7 @@ export function SiteListClient({
                 value={subCategoryFilter}
                 onValueChange={(value) => {
                   setSubCategoryFilter(value)
+                  setCurrentPage(1)
                   setSelectedSites([])
                 }}
               >
@@ -1214,7 +1225,11 @@ export function SiteListClient({
               </Select>
               <Select
                 value={statusFilter}
-                onValueChange={(value: 'all' | 'enabled' | 'disabled') => setStatusFilter(value)}
+                onValueChange={(value: 'all' | 'enabled' | 'disabled') => {
+                  setStatusFilter(value)
+                  setCurrentPage(1)
+                  setSelectedSites([])
+                }}
               >
                 <SelectTrigger className="w-full sm:w-[160px]">
                   <SelectValue placeholder="按状态筛选" />
@@ -2247,21 +2262,21 @@ export function SiteListClient({
               <Icons.search className="h-8 w-8 text-gray-400" />
             </div>
             <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
-              {sites.length === 0 ? "暂无站点" : "未找到匹配的站点"}
+              {totalSiteCount === 0 ? "暂无站点" : "未找到匹配的站点"}
             </h3>
             <p className="text-gray-500 dark:text-gray-400 mb-6">
-              {sites.length === 0
+              {totalSiteCount === 0
                 ? "开始添加您的第一个站点吧"
                 : "尝试调整搜索条件或筛选器"
               }
             </p>
-            {sites.length === 0 && (
+            {totalSiteCount === 0 && (
               <Button onClick={() => setShowAddDialog(true)}>
                 <Icons.plus className="mr-2 h-4 w-4" />
                 添加站点
               </Button>
             )}
-            {sites.length > 0 && filteredSites.length === 0 && (
+            {totalSiteCount > 0 && resultSiteCount === 0 && (
               <div className="flex gap-2 justify-center">
                 <Button
                   variant="outline"
@@ -2270,12 +2285,68 @@ export function SiteListClient({
                     setCategoryFilter('all')
                     setSubCategoryFilter('all')
                     setStatusFilter('all')
+                    setCurrentPage(1)
                   }}
                 >
                   清除筛选
                 </Button>
               </div>
             )}
+          </div>
+        )}
+
+        {resultSiteCount > 0 && (
+          <div className="flex flex-col gap-3 rounded-md border bg-background px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-muted-foreground">
+              第 {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, resultSiteCount)} 条，
+              共 {resultSiteCount} 条
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Select
+                value={String(pageSize)}
+                onValueChange={(value) => {
+                  setPageSize(Number(value))
+                  setCurrentPage(1)
+                  setSelectedSites([])
+                }}
+              >
+                <SelectTrigger className="h-8 w-[108px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">每页 10 条</SelectItem>
+                  <SelectItem value="25">每页 25 条</SelectItem>
+                  <SelectItem value="50">每页 50 条</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={currentPage <= 1 || isLoading}
+                onClick={() => {
+                  setCurrentPage(page => Math.max(1, page - 1))
+                  setSelectedSites([])
+                }}
+              >
+                上一页
+              </Button>
+              <span className="min-w-16 text-center text-sm">
+                {currentPage} / {totalPages}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={currentPage >= totalPages || isLoading}
+                onClick={() => {
+                  setCurrentPage(page => Math.min(totalPages, page + 1))
+                  setSelectedSites([])
+                }}
+              >
+                下一页
+              </Button>
+            </div>
           </div>
         )}
 

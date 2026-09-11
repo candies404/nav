@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import {
     deleteManagedResources,
-    listManagedResources,
+    getManagedResourcePage,
     MISSING_BLOB_CONFIG_MESSAGE,
     uploadManagedResource,
 } from '@/lib/resource-storage'
@@ -17,13 +17,23 @@ export async function GET(request: Request) {
         }
 
         const { searchParams } = new URL(request.url)
-        return NextResponse.json(await listManagedResources({
+        return NextResponse.json(await getManagedResourcePage({
             fresh: searchParams.get('fresh') === '1',
+            page: readPositiveInteger(searchParams.get('page')),
+            pageSize: readPositiveInteger(searchParams.get('pageSize')),
+            query: searchParams.get('query'),
+            kind: searchParams.get('kind'),
         }))
     } catch (error) {
         console.error('Failed to fetch resources:', error)
         return handleResourceError(error, '图片资源加载失败')
     }
+}
+
+function readPositiveInteger(value: string | null) {
+    if (!value) return undefined
+    const parsed = Number(value)
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
 }
 
 export async function POST(request: Request) {

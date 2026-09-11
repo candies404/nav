@@ -32,6 +32,20 @@ export type ResourceCardResource = {
   items: ResourceCardItem[]
 }
 
+export type ResourceKind = 'all' | 'manual' | 'cached'
+
+export type ResourceListPage = {
+  resources: ResourceCardResource[]
+  page: number
+  pageSize: number
+  total: number
+  filteredTotal: number
+  totalPages: number
+  manualCount: number
+  cachedCount: number
+  kind: ResourceKind
+}
+
 export type UploadResourceResponse = {
   success: boolean
   imageUrl: string
@@ -43,15 +57,52 @@ type UploadProgressHandlers = {
   onSpeed?: (bytesPerSecond: number) => void
 }
 
-export async function listResources(options: { fresh?: boolean } = {}) {
-  const response = await fetch(options.fresh ? '/api/resource?fresh=1' : '/api/resource')
-  const data = await readJsonResponse<{ metadata?: ResourceMetadataItem[] }>(response, '加载图片资源失败')
+export async function listResources(options: {
+  fresh?: boolean
+  page?: number
+  pageSize?: number
+  query?: string
+  kind?: ResourceKind
+} = {}): Promise<ResourceListPage> {
+  const searchParams = new URLSearchParams()
+  if (options.fresh) searchParams.set('fresh', '1')
+  if (options.page) searchParams.set('page', String(options.page))
+  if (options.pageSize) searchParams.set('pageSize', String(options.pageSize))
+  if (options.query) searchParams.set('query', options.query)
+  if (options.kind && options.kind !== 'all') searchParams.set('kind', options.kind)
+  const queryString = searchParams.toString()
+  const response = await fetch(`/api/resource${queryString ? `?${queryString}` : ''}`)
+  const data = await readJsonResponse<{
+    metadata?: ResourceMetadataItem[]
+    page?: number
+    pageSize?: number
+    total?: number
+    filteredTotal?: number
+    totalPages?: number
+    manualCount?: number
+    cachedCount?: number
+    kind?: ResourceKind
+  }>(response, '加载图片资源失败')
 
   if (!Array.isArray(data.metadata)) {
     throw new Error('图片资源数据不可用')
   }
 
-  return data.metadata.map<ResourceCardResource>((item, index) => ({
+  return {
+    resources: mapResourceMetadata(data.metadata),
+    page: data.page ?? 1,
+    pageSize: data.pageSize ?? options.pageSize ?? 40,
+    total: data.total ?? data.metadata.length,
+    filteredTotal: data.filteredTotal ?? data.metadata.length,
+    totalPages: data.totalPages ?? 1,
+    manualCount: data.manualCount ?? 0,
+    cachedCount: data.cachedCount ?? 0,
+    kind: data.kind ?? 'all',
+  }
+}
+
+export function mapResourceMetadata(metadata: ResourceMetadataItem[]) {
+  return metadata.map<ResourceCardResource>((item, index) => ({
     id: item.hash,
     title: item.pathname || item.path || `图片资源 ${index + 1}`,
     items: [{

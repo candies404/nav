@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
 import { NavigationItem, NavigationCategory, NavigationSubItem } from '@/types/navigation'
 import { Button } from "@/components/ui/button"
@@ -49,6 +49,8 @@ const JsonEditor = dynamic(
     ),
   }
 )
+
+const EMPTY_NAVIGATION_JSON = JSON.stringify({ navigationItems: [] }, null, 2)
 
 type NavigationHistorySummary = {
   id: string
@@ -583,16 +585,16 @@ function getNavigationChangeSummary(previousJson: string, currentJson: string) {
   }
 }
 
-export function DataManagementClient({ initialNavigationJson }: { initialNavigationJson: string }) {
-  const [navigationData, setNavigationData] = useState(initialNavigationJson)
-  const [isLoading, setIsLoading] = useState(false)
+export function DataManagementClient() {
+  const [navigationData, setNavigationData] = useState(EMPTY_NAVIGATION_JSON)
+  const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isRestoreDialogOpen, setIsRestoreDialogOpen] = useState(false)
   const [isJsonValid, setIsJsonValid] = useState(true)
   const [jsonError, setJsonError] = useState('')
-  const [dataStats, setDataStats] = useState(() => getNavigationDataStats(initialNavigationJson))
-  const [savedDataStats, setSavedDataStats] = useState<NavigationDataStats | null>(() => getNavigationDataStats(initialNavigationJson))
-  const [savedNavigationData, setSavedNavigationData] = useState(initialNavigationJson)
+  const [dataStats, setDataStats] = useState(() => getNavigationDataStats(EMPTY_NAVIGATION_JSON))
+  const [savedDataStats, setSavedDataStats] = useState<NavigationDataStats | null>(null)
+  const [savedNavigationData, setSavedNavigationData] = useState(EMPTY_NAVIGATION_JSON)
   const [activeTab, setActiveTab] = useState('maintenance')
 
   const [defaultFileStatus, setDefaultFileStatus] = useState({ exists: false, valid: false, itemCount: 0, checked: false })
@@ -602,6 +604,7 @@ export function DataManagementClient({ initialNavigationJson }: { initialNavigat
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [isRestoringHistory, setIsRestoringHistory] = useState(false)
   const [deletingHistoryId, setDeletingHistoryId] = useState<string | null>(null)
+  const backupDataLoadedRef = useRef(false)
   const { toast } = useToast()
 
   // 检查默认文件状态
@@ -648,6 +651,7 @@ export function DataManagementClient({ initialNavigationJson }: { initialNavigat
     setIsRestoreDialogOpen(open)
 
     if (open) {
+      backupDataLoadedRef.current = true
       setHistoryPreview(null)
       loadHistoryVersions()
       checkDefaultFile()
@@ -673,10 +677,10 @@ export function DataManagementClient({ initialNavigationJson }: { initialNavigat
   }, [])
 
   // 加载当前导航数据
-  const loadNavigationData = useCallback(async () => {
+  const loadNavigationData = useCallback(async (fresh = true) => {
     setIsLoading(true)
     try {
-      const response = await fetch('/api/navigation?fresh=1')
+      const response = await fetch(fresh ? '/api/navigation?fresh=1' : '/api/navigation')
       if (response.ok) {
         const data = await response.json()
         const jsonString = JSON.stringify(data, null, 2)
@@ -1107,8 +1111,16 @@ export function DataManagementClient({ initialNavigationJson }: { initialNavigat
   }, [historyPreview, navigationData, savedNavigationData])
 
   useEffect(() => {
-    checkDefaultFile()
-    loadHistoryVersions()
+    void loadNavigationData(false)
+  }, [loadNavigationData])
+
+  const handleTabChange = useCallback((value: string) => {
+    setActiveTab(value)
+    if (value === 'backup' && !backupDataLoadedRef.current) {
+      backupDataLoadedRef.current = true
+      void checkDefaultFile()
+      void loadHistoryVersions()
+    }
   }, [checkDefaultFile, loadHistoryVersions])
 
   // Monaco Editor 事件监听
@@ -1183,7 +1195,7 @@ export function DataManagementClient({ initialNavigationJson }: { initialNavigat
         </Card>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
         <TabsList className="grid w-full grid-cols-3 lg:w-[560px]">
           <TabsTrigger value="maintenance">
             <Database className="mr-2 h-4 w-4" />
@@ -1210,7 +1222,7 @@ export function DataManagementClient({ initialNavigationJson }: { initialNavigat
             <CardContent>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <Button
-                  onClick={loadNavigationData}
+                  onClick={() => loadNavigationData()}
                   disabled={isLoading}
                   variant="outline"
                   className="h-12 w-full justify-start"

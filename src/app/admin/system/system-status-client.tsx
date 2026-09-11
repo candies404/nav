@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Activity,
   AlertTriangle,
@@ -57,17 +57,17 @@ const serviceIcons: Record<string, typeof Database> = {
   history: History,
 }
 
-export function SystemStatusClient({ initialStatus }: { initialStatus: SystemStatus }) {
-  const [status, setStatus] = useState<SystemStatus | null>(initialStatus)
-  const [isLoading, setIsLoading] = useState(false)
+export function SystemStatusClient() {
+  const [status, setStatus] = useState<SystemStatus | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
 
-  const loadStatus = useCallback(async () => {
+  const loadStatus = useCallback(async (fresh = true) => {
     setIsLoading(true)
     setError('')
 
     try {
-      const response = await fetch('/api/admin/system-status?fresh=1', {
+      const response = await fetch(fresh ? '/api/admin/system-status?fresh=1' : '/api/admin/system-status', {
         cache: 'no-store',
       })
       const contentType = response.headers.get('content-type') || ''
@@ -86,6 +86,10 @@ export function SystemStatusClient({ initialStatus }: { initialStatus: SystemSta
       setIsLoading(false)
     }
   }, [])
+
+  useEffect(() => {
+    void loadStatus(false)
+  }, [loadStatus])
 
   const summary = useMemo(() => {
     const items = [...(status?.services || []), ...(status?.capabilities || [])]
@@ -109,7 +113,7 @@ export function SystemStatusClient({ initialStatus }: { initialStatus: SystemSta
         <Button
           type="button"
           variant="outline"
-          onClick={loadStatus}
+          onClick={() => loadStatus()}
           disabled={isLoading}
           className="w-full sm:w-auto"
         >

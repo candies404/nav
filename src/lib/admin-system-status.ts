@@ -31,8 +31,13 @@ const REDIS_KEY_PREFIX = process.env.UPSTASH_REDIS_KEY_PREFIX || 'navsphere'
 const BLOB_TOKEN = process.env.BLOB_READ_WRITE_TOKEN
 const BLOB_STORE_ID = process.env.BLOB_STORE_ID
 const DATA_HISTORY_LIMIT = process.env.NAVSPHERE_DATA_HISTORY_LIMIT || '10'
-const SYSTEM_STATUS_CACHE_TTL_MS = Number(
-  process.env.NAVSPHERE_ADMIN_SYSTEM_STATUS_CACHE_TTL_MS || 10_000
+const SYSTEM_STATUS_CACHE_TTL_MS = getPositiveInteger(
+  process.env.NAVSPHERE_ADMIN_SYSTEM_STATUS_CACHE_TTL_MS,
+  10_000
+)
+const SYSTEM_STATUS_PROBE_TIMEOUT_MS = getPositiveInteger(
+  process.env.NAVSPHERE_ADMIN_SYSTEM_STATUS_PROBE_TIMEOUT_MS,
+  5_000
 )
 const globalSystemStatusCache = globalThis as typeof globalThis & {
   __navsphereAdminSystemStatusCache?: {
@@ -88,6 +93,8 @@ async function checkRedisStatus(): Promise<SystemStatusItem> {
   }
 
   const startedAt = Date.now()
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), SYSTEM_STATUS_PROBE_TIMEOUT_MS)
   try {
     const response = await fetch(REDIS_URL, {
       method: 'POST',
@@ -97,6 +104,7 @@ async function checkRedisStatus(): Promise<SystemStatusItem> {
       },
       body: JSON.stringify(['PING']),
       cache: 'no-store',
+      signal: controller.signal,
     })
     const latencyMs = Date.now() - startedAt
 
@@ -147,6 +155,8 @@ async function checkRedisStatus(): Promise<SystemStatusItem> {
       details: getErrorMessage(error),
       action: '检查当前环境网络、Upstash 实例地址和 Token。',
     }
+  } finally {
+    clearTimeout(timeoutId)
   }
 }
 
@@ -165,10 +175,14 @@ async function checkBlobStatus(): Promise<SystemStatusItem> {
 
   const startedAt = Date.now()
   try {
-    await list({
-      limit: 1,
-      storeId: BLOB_STORE_ID,
-    })
+    await withTimeout(
+      list({
+        limit: 1,
+        storeId: BLOB_STORE_ID,
+      }),
+      SYSTEM_STATUS_PROBE_TIMEOUT_MS,
+      'Blob status probe'
+    )
 
     return {
       id: 'blob',
@@ -231,4 +245,25 @@ function getHostName(value?: string) {
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
+}
+
+function getPositiveInteger(value: string | undefined, fallback: number) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string) {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(
+      () => reject(new Error(`${label} timed out after ${timeoutMs}ms`)),
+      timeoutMs
+    )
+  })
+
+  try {
+    return await Promise.race([promise, timeout])
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
+  }
 }

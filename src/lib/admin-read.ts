@@ -41,6 +41,11 @@ export type AdminNavigationCategories = {
 type AdminSiteListInput = AdminReadOptions & {
   categoryId?: string | null
   subCategoryId?: string | null
+  query?: string | null
+  status?: 'all' | 'enabled' | 'disabled' | string | null
+  page?: number
+  pageSize?: number
+  all?: boolean
 }
 
 export async function getAdminNavigationData(options: AdminReadOptions = {}) {
@@ -92,18 +97,33 @@ export async function getAdminNavigationSites(input: AdminSiteListInput = {}) {
   const categoryId = normalizeOptionalId(input.categoryId)
   const subCategoryId = normalizeSubCategoryId(input.subCategoryId)
   const filterMainItemsOnly = input.subCategoryId === 'none'
+  const query = input.query?.trim().toLocaleLowerCase() || ''
+  const status = input.status === 'enabled' || input.status === 'disabled'
+    ? input.status
+    : 'all'
   const totalSiteCount = countSites(data)
   let siteCount = 0
 
-  const navigationItems = data.navigationItems.map(category => {
+  const filterItems = (items: NavigationCategory['items'] = []) => {
+    const filteredItems = items.filter(item => {
+      const matchesQuery = !query || [item.title, item.href, item.description]
+        .some(value => value?.toLocaleLowerCase().includes(query))
+      const matchesStatus = status === 'all'
+        || (status === 'enabled' && item.enabled !== false)
+        || (status === 'disabled' && item.enabled === false)
+      return matchesQuery && matchesStatus
+    })
+    siteCount += filteredItems.length
+    return filteredItems
+  }
+
+  const filteredNavigationItems = data.navigationItems.map(category => {
     const matchesCategory = !categoryId || category.id === categoryId
     const items = matchesCategory && !subCategoryId
-      ? [...(category.items || [])]
+      ? filterItems(category.items)
       : matchesCategory && filterMainItemsOnly
-        ? [...(category.items || [])]
+        ? filterItems(category.items)
         : []
-
-    siteCount += items.length
 
     return {
       id: category.id,
@@ -114,8 +134,7 @@ export async function getAdminNavigationSites(input: AdminSiteListInput = {}) {
         const matchesSubCategory = matchesCategory
           && !filterMainItemsOnly
           && (!subCategoryId || subCategory.id === subCategoryId)
-        const subItems = matchesSubCategory ? [...(subCategory.items || [])] : []
-        siteCount += subItems.length
+        const subItems = matchesSubCategory ? filterItems(subCategory.items) : []
 
         return {
           id: subCategory.id,
@@ -127,12 +146,39 @@ export async function getAdminNavigationSites(input: AdminSiteListInput = {}) {
     }
   })
 
+  const pageSize = input.all ? Math.max(siteCount, 1) : clampInteger(input.pageSize, 25, 10, 100)
+  const totalPages = input.all ? 1 : Math.max(1, Math.ceil(siteCount / pageSize))
+  const page = input.all ? 1 : clampInteger(input.page, 1, 1, totalPages)
+  const startIndex = input.all ? 0 : (page - 1) * pageSize
+  const endIndex = input.all ? siteCount : startIndex + pageSize
+  let itemIndex = 0
+
+  const takePageItems = (items: NavigationCategory['items'] = []) => items.filter(() => {
+    const currentIndex = itemIndex
+    itemIndex += 1
+    return currentIndex >= startIndex && currentIndex < endIndex
+  })
+
+  const navigationItems = filteredNavigationItems.map(category => ({
+    ...category,
+    items: takePageItems(category.items),
+    subCategories: category.subCategories.map(subCategory => ({
+      ...subCategory,
+      items: takePageItems(subCategory.items),
+    })),
+  }))
+
   return {
     navigationItems,
     totalSiteCount,
     siteCount,
     categoryId,
     subCategoryId: filterMainItemsOnly ? 'none' : subCategoryId,
+    query,
+    status,
+    page,
+    pageSize,
+    totalPages,
   }
 }
 
@@ -190,6 +236,16 @@ function normalizeOptionalId(value?: string | null) {
 function normalizeSubCategoryId(value?: string | null) {
   const normalized = normalizeOptionalId(value)
   return normalized === 'none' ? undefined : normalized
+}
+
+function clampInteger(
+  value: number | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number
+) {
+  const normalized = Number.isFinite(value) ? Math.floor(value as number) : fallback
+  return Math.min(maximum, Math.max(minimum, normalized))
 }
 
 function countSites(data: NavigationData) {

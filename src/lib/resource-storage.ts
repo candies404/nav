@@ -38,8 +38,23 @@ type ManagedResourceList = {
   metadata: ManagedResource[]
 }
 
-const RESOURCE_LIST_CACHE_TTL_MS = Number(
-  process.env.NAVSPHERE_ADMIN_RESOURCE_CACHE_TTL_MS || 10_000
+export type ManagedResourceKind = 'all' | 'manual' | 'cached'
+
+export type ManagedResourcePage = ManagedResourceList & {
+  page: number
+  pageSize: number
+  total: number
+  filteredTotal: number
+  totalPages: number
+  manualCount: number
+  cachedCount: number
+  query: string
+  kind: ManagedResourceKind
+}
+
+const RESOURCE_LIST_CACHE_TTL_MS = getPositiveInteger(
+  process.env.NAVSPHERE_ADMIN_RESOURCE_CACHE_TTL_MS,
+  60_000
 )
 const globalResourceCache = globalThis as typeof globalThis & {
   __navsphereManagedResourceCache?: {
@@ -92,6 +107,49 @@ export async function listManagedResources(options: { fresh?: boolean } = {}) {
   return result
 }
 
+export async function getManagedResourcePage(options: {
+  fresh?: boolean
+  page?: number
+  pageSize?: number
+  query?: string | null
+  kind?: string | null
+} = {}): Promise<ManagedResourcePage> {
+  const resources = await listManagedResources({ fresh: options.fresh })
+  const query = options.query?.trim().toLocaleLowerCase() || ''
+  const kind: ManagedResourceKind = options.kind === 'manual' || options.kind === 'cached'
+    ? options.kind
+    : 'all'
+  const manualCount = resources.metadata.filter(resource => !isAutoCachedResource(resource)).length
+  const cachedCount = resources.metadata.length - manualCount
+  const filtered = resources.metadata.filter(resource => {
+    const matchesQuery = !query || [resource.pathname, resource.path, resource.url]
+      .some(value => value.toLocaleLowerCase().includes(query))
+    const isCached = isAutoCachedResource(resource)
+    const matchesKind = kind === 'all'
+      || (kind === 'cached' && isCached)
+      || (kind === 'manual' && !isCached)
+    return matchesQuery && matchesKind
+  })
+  const pageSize = clampInteger(options.pageSize, 40, 10, 100)
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const page = clampInteger(options.page, 1, 1, totalPages)
+  const startIndex = (page - 1) * pageSize
+
+  return {
+    ...resources,
+    metadata: filtered.slice(startIndex, startIndex + pageSize),
+    page,
+    pageSize,
+    total: resources.metadata.length,
+    filteredTotal: filtered.length,
+    totalPages,
+    manualCount,
+    cachedCount,
+    query,
+    kind,
+  }
+}
+
 export async function uploadManagedResource(input: {
   image: string
   folder?: string
@@ -135,6 +193,25 @@ export async function deleteManagedResources(resourceHashes: string[]) {
 
 function invalidateManagedResourceCache() {
   delete globalResourceCache.__navsphereManagedResourceCache
+}
+
+function isAutoCachedResource(resource: ManagedResource) {
+  return resource.pathname.startsWith('favicons/') || resource.pathname.startsWith('favicons_')
+}
+
+function clampInteger(
+  value: number | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number
+) {
+  const normalized = Number.isFinite(value) ? Math.floor(value as number) : fallback
+  return Math.min(maximum, Math.max(minimum, normalized))
+}
+
+function getPositiveInteger(value: string | undefined, fallback: number) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback
 }
 
 export async function checkManagedResourceReferences(resourcePaths: string[]) {

@@ -1,8 +1,7 @@
-import { getAdminSystemStatus } from '@/lib/admin-system-status'
-import { SystemStatusClient } from './system-status-client'
+import { SystemStatusLazy } from './system-status-lazy'
 
 export const runtime = 'edge'
 
-export default async function AdminSystemStatusPage() {
-  return <SystemStatusClient initialStatus={await getAdminSystemStatus()} />
+export default function AdminSystemStatusPage() {
+  return <SystemStatusLazy />
 }
