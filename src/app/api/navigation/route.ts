@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { isAuthenticatedRequest } from '@/lib/auth-token'
 import { getFileContent, getStorageErrorMessage } from '@/lib/storage'
+import { ADMIN_READ_CACHE_TTL_MS } from '@/lib/admin-read'
 import { filterNavigationData, processNavigationData } from '@/lib/data-loader'
 import { saveNavigationData } from '@/lib/navigation-storage'
 import type { NavigationData, NavigationDataRaw, NavigationItem } from '@/types/navigation'
@@ -11,10 +12,14 @@ export const runtime = 'edge'
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
+    const forceFresh = searchParams.get('fresh') === '1'
     const [data, isAuthenticated] = await Promise.all([
       getFileContent(
         'src/navsphere/content/navigation.json',
-        { bypassCache: true }
+        {
+          bypassCache: forceFresh,
+          maxAgeMs: ADMIN_READ_CACHE_TTL_MS,
+        }
       ) as Promise<NavigationDataRaw>,
       isAuthenticatedRequest(request),
     ])

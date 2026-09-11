@@ -3,12 +3,12 @@ import { auth } from '@/lib/auth'
 import {
   addNavigationSite,
   batchUpdateNavigationSites,
-  listNavigationSites,
   NavigationSiteMutationError,
   reorderNavigationSites,
   type AddSiteInput,
   type BatchSiteOperation,
 } from '@/lib/navigation-site-mutations'
+import { getAdminNavigationSites } from '@/lib/admin-read'
 import { getStorageErrorMessage } from '@/lib/storage'
 
 export const runtime = 'edge'
@@ -19,9 +19,10 @@ export async function GET(request: Request) {
     const session = await auth()
     if (!session?.user) return new Response('Unauthorized', { status: 401 })
 
-    const result = await listNavigationSites({
+    const result = await getAdminNavigationSites({
       categoryId: searchParams.get('categoryId'),
       subCategoryId: searchParams.get('subCategoryId'),
+      fresh: searchParams.get('fresh') === '1',
     })
 
     return NextResponse.json(result, {

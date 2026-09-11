@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
+import { getAdminNavigationCategories } from '@/lib/admin-read'
 import { getFileContent, getStorageErrorMessage } from '@/lib/storage'
 import { cloneNavigationData, saveNavigationData } from '@/lib/navigation-storage'
 import type { NavigationCategory, NavigationData } from '@/types/navigation'
@@ -7,19 +8,21 @@ import type { NavigationCategory, NavigationData } from '@/types/navigation'
 export const runtime = 'edge'
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params
-    const data = await loadNavigationData()
-    const navigation = data.navigationItems.find(nav => nav.id === id)
+    const { searchParams } = new URL(request.url)
+    const navigation = await getAdminNavigationCategories(id, {
+      fresh: searchParams.get('fresh') === '1',
+    })
 
     if (!navigation) {
       return NextResponse.json({ error: 'Navigation not found' }, { status: 404 })
     }
 
-    return NextResponse.json(toCategorySummary(navigation))
+    return NextResponse.json(navigation)
   } catch (error) {
     console.error('Fetch categories error:', error)
     return NextResponse.json(

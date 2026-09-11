@@ -2,9 +2,9 @@
 
 import { installAdminUnauthorizedRedirect } from '@/lib/admin-unauthorized-redirect'
 import { useState, type ReactNode } from 'react'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import Image from 'next/image'
-import Link from 'next/link'
+import Link, { useLinkStatus } from 'next/link'
 import { signOut } from 'next-auth/react'
 import { useTheme } from 'next-themes'
 import {
@@ -16,6 +16,7 @@ import {
   Home,
   LayoutDashboard,
   ListTodo,
+  Loader2,
   LogOut,
   Menu as MenuIcon,
   Monitor,
@@ -113,6 +114,7 @@ installAdminUnauthorizedRedirect()
 
 export function AdminLayoutClient({ children, user }: AdminLayoutClientProps) {
   const pathname = usePathname()
+  const router = useRouter()
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
   const [expandedItems, setExpandedItems] = useState<string[]>([])
@@ -124,6 +126,10 @@ export function AdminLayoutClient({ children, user }: AdminLayoutClientProps) {
         ? prev.filter((item) => item !== href)
         : [...prev, href]
     )
+  }
+
+  const prefetchRoute = (href: string) => {
+    router.prefetch(href)
   }
 
   const renderLogo = (collapsed = false) => (
@@ -176,13 +182,24 @@ export function AdminLayoutClient({ children, user }: AdminLayoutClientProps) {
                 isActive && 'bg-muted',
                 !showLabel && 'justify-center px-0'
               )}
-              onClick={() => item.subItems && toggleMenuItem(item.href)}
+              onClick={() => {
+                if (!item.subItems) return
+
+                toggleMenuItem(item.href)
+                item.subItems.forEach(subItem => prefetchRoute(subItem.href))
+              }}
               asChild={!item.subItems}
             >
               {!item.subItems ? (
-                <Link href={item.href} onClick={() => mobile && setIsMobileNavOpen(false)}>
+                <Link
+                  href={item.href}
+                  onMouseEnter={() => prefetchRoute(item.href)}
+                  onFocus={() => prefetchRoute(item.href)}
+                  onClick={() => mobile && setIsMobileNavOpen(false)}
+                >
                   <item.icon className={cn('h-4 w-4 shrink-0', showLabel && 'mr-2')} />
                   {showLabel && <span className="truncate">{item.title}</span>}
+                  <MenuLinkPendingIndicator />
                 </Link>
               ) : (
                 <>
@@ -214,8 +231,14 @@ export function AdminLayoutClient({ children, user }: AdminLayoutClientProps) {
                     )}
                     asChild
                   >
-                    <Link href={subItem.href} onClick={() => mobile && setIsMobileNavOpen(false)}>
+                    <Link
+                      href={subItem.href}
+                      onMouseEnter={() => prefetchRoute(subItem.href)}
+                      onFocus={() => prefetchRoute(subItem.href)}
+                      onClick={() => mobile && setIsMobileNavOpen(false)}
+                    >
                       <span className="truncate">{subItem.title}</span>
+                      <MenuLinkPendingIndicator />
                     </Link>
                   </Button>
                 ))}
@@ -442,4 +465,12 @@ export function AdminLayoutClient({ children, user }: AdminLayoutClientProps) {
       </div>
     </div>
   )
+}
+
+function MenuLinkPendingIndicator() {
+  const { pending } = useLinkStatus()
+
+  return pending
+    ? <Loader2 className="ml-auto h-3.5 w-3.5 shrink-0 animate-spin" aria-label="页面加载中" />
+    : null
 }

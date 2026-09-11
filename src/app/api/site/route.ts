@@ -1,17 +1,18 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { commitFile, getFileContent, getStorageErrorMessage } from '@/lib/storage'
+import { commitFile, getStorageErrorMessage } from '@/lib/storage'
+import { getAdminSiteConfig } from '@/lib/admin-read'
 import type { SiteInfo } from '@/types/site'
 import { revalidateSiteContent } from '@/lib/cache-invalidation'
 
 export const runtime = 'edge'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const data = await getFileContent(
-      'src/navsphere/content/site.json',
-      { bypassCache: true }
-    ) as SiteInfo
+    const { searchParams } = new URL(request.url)
+    const data = await getAdminSiteConfig({
+      fresh: searchParams.get('fresh') === '1',
+    })
     return NextResponse.json(data)
   } catch (error) {
     console.error('Failed to read site data:', error)

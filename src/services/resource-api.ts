@@ -43,8 +43,8 @@ type UploadProgressHandlers = {
   onSpeed?: (bytesPerSecond: number) => void
 }
 
-export async function listResources() {
-  const response = await fetch('/api/resource')
+export async function listResources(options: { fresh?: boolean } = {}) {
+  const response = await fetch(options.fresh ? '/api/resource?fresh=1' : '/api/resource')
   const data = await readJsonResponse<{ metadata?: ResourceMetadataItem[] }>(response, '加载图片资源失败')
 
   if (!Array.isArray(data.metadata)) {

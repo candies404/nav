@@ -12,11 +12,13 @@ type RedisResponse<T> = {
 
 type DataCacheEntry = {
   value: unknown
+  cachedAt: number
   expiresAt: number
 }
 
 type GetFileContentOptions = {
   bypassCache?: boolean
+  maxAgeMs?: number
 }
 
 const MISSING_REDIS_CONFIG_MESSAGE =
@@ -141,14 +143,19 @@ function positiveInteger(value: string | undefined, fallback: number) {
   return Math.floor(parsed)
 }
 
-function getCachedContent(path: string) {
+function getCachedContent(path: string, maxAgeMs = DATA_CACHE_TTL_MS) {
   if (DATA_CACHE_TTL_MS <= 0) return undefined
 
   const key = dataKey(path)
   const cached = dataCache.get(key)
   if (!cached) return undefined
 
-  if (cached.expiresAt <= Date.now()) {
+  const now = Date.now()
+  if (
+    cached.expiresAt <= now
+    || !cached.cachedAt
+    || now - cached.cachedAt > Math.max(0, maxAgeMs)
+  ) {
     dataCache.delete(key)
     return undefined
   }
@@ -159,9 +166,11 @@ function getCachedContent(path: string) {
 function setCachedContent(path: string, value: unknown, ttlMs = DATA_CACHE_TTL_MS) {
   if (ttlMs <= 0) return
 
+  const now = Date.now()
   dataCache.set(dataKey(path), {
     value: cloneDefault(value),
-    expiresAt: Date.now() + ttlMs,
+    cachedAt: now,
+    expiresAt: now + ttlMs,
   })
 }
 
@@ -241,7 +250,7 @@ function getBlobOptions() {
 
 export async function getFileContent(path: string, options: GetFileContentOptions = {}) {
   if (!options.bypassCache) {
-    const cached = getCachedContent(path)
+    const cached = getCachedContent(path, options.maxAgeMs)
     if (cached !== undefined) {
       return cached
     }

@@ -1,0 +1,159 @@
+'use client'
+
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Activity, Settings, Menu, Database, Folders, FolderTree, Globe, RefreshCw } from 'lucide-react'
+import Link from 'next/link'
+import { useEffect, useState } from 'react'
+import type { AdminStats } from '@/lib/admin-read'
+
+export function AdminDashboard({ initialStats }: { initialStats: AdminStats }) {
+  // 添加状态来存储统计数据
+  const [stats, setStats] = useState(initialStats)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+
+  // 获取统计数据
+  const fetchStats = async (showLoading = false) => {
+    try {
+      if (showLoading) setIsRefreshing(true)
+      const response = await fetch(showLoading ? '/api/admin/stats?fresh=1' : '/api/admin/stats')
+      if (!response.ok) throw new Error('Failed to fetch stats')
+      const data = await response.json()
+      setStats(data)
+    } catch (error) {
+      console.error('Failed to fetch stats:', error)
+    } finally {
+      if (showLoading) setIsRefreshing(false)
+    }
+  }
+
+  // 页面获得焦点时刷新统计数据
+  useEffect(() => {
+    const handleFocus = () => {
+      fetchStats()
+    }
+
+    window.addEventListener('focus', handleFocus)
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+    }
+  }, [])
+
+  // 统计卡片数据
+  const statsItems = [
+    {
+      title: '分类总数',
+      value: stats.totalCategories,
+      icon: Database,
+      description: '所有分类数量'
+    },
+    {
+      title: '一级分类数量',
+      value: stats.parentCategories,
+      icon: Folders,
+      description: '网站一级分类总数'
+    },
+    {
+      title: '二级分类数量',
+      value: stats.subCategories,
+      icon: FolderTree,
+      description: '网站二级分类总数'
+    },
+    {
+      title: '站点总数',
+      value: stats.totalSites,
+      icon: Globe,
+      description: '收录的网站总数'
+    },
+  ]
+
+  const dashboardItems = [
+    {
+      title: '站点设置',
+      icon: Settings,
+      href: '/admin/site',
+      description: '管理网站的基本信息，如标题、描述、Logo等'
+    },
+    {
+      title: '导航管理',
+      icon: Menu,
+      href: '/admin/navigation',
+      description: '管理一级分类、二级分类和分类排序'
+    },
+    {
+      title: '站点管理',
+      icon: Globe,
+      href: '/admin/sitelist',
+      description: '集中新增、编辑、移动和删除具体网站'
+    },
+    {
+      title: '图片资源',
+      icon: Database,
+      href: '/admin/resources',
+      description: '管理手动上传资源和自动缓存图标'
+    },
+    {
+      title: '系统状态',
+      icon: Activity,
+      href: '/admin/system',
+      description: '查看关键存储配置和后台能力状态'
+    }
+  ]
+
+  return (
+    <div className="space-y-5 sm:space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-2xl font-bold sm:text-3xl">控制台</h1>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => fetchStats(true)}
+          disabled={isRefreshing}
+          className="w-full sm:w-auto"
+      >
+          <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+          刷新统计
+        </Button>
+      </div>
+
+      {/* 统计卡片 */}
+      <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
+        {statsItems.map((item, index) => (
+          <Card key={index}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                {item.title}
+              </CardTitle>
+              <item.icon className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-xl font-bold sm:text-2xl">{item.value}</div>
+              <p className="text-xs text-muted-foreground">
+                {item.description}
+              </p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* 原有的功能卡片 */}
+      <div className="grid gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {dashboardItems.map(item => (
+          <Link key={item.href} href={item.href}>
+            <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+              <CardHeader className="flex flex-row items-center space-x-4">
+                <item.icon className="w-8 h-8 text-muted-foreground" />
+                <CardTitle>{item.title}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  {item.description}
+                </p>
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
+    </div>
+  )
+}

@@ -30,6 +30,24 @@ export type ResourceReference = {
 
 export type ResourceReferenceMap = Record<string, ResourceReference[]>
 
+type ManagedResourceList = {
+  commit: string
+  generated: string
+  source: 'blob'
+  storage: 'blob'
+  metadata: ManagedResource[]
+}
+
+const RESOURCE_LIST_CACHE_TTL_MS = Number(
+  process.env.NAVSPHERE_ADMIN_RESOURCE_CACHE_TTL_MS || 10_000
+)
+const globalResourceCache = globalThis as typeof globalThis & {
+  __navsphereManagedResourceCache?: {
+    value: ManagedResourceList
+    expiresAt: number
+  }
+}
+
 export function hasResourceStorage() {
   return isBlobStorageConfigured()
 }
@@ -40,11 +58,16 @@ export function assertResourceStorageConfigured() {
   }
 }
 
-export async function listManagedResources() {
+export async function listManagedResources(options: { fresh?: boolean } = {}) {
   assertResourceStorageConfigured()
 
+  const cached = globalResourceCache.__navsphereManagedResourceCache
+  if (!options.fresh && cached && cached.expiresAt > Date.now()) {
+    return cached.value
+  }
+
   const blobs = await listBlobAssets()
-  return {
+  const result: ManagedResourceList = {
     commit: '',
     generated: new Date().toISOString(),
     source: 'blob',
@@ -60,6 +83,13 @@ export async function listManagedResources() {
       uploadedAt: blob.uploadedAt,
     })),
   }
+
+  globalResourceCache.__navsphereManagedResourceCache = {
+    value: result,
+    expiresAt: Date.now() + RESOURCE_LIST_CACHE_TTL_MS,
+  }
+
+  return result
 }
 
 export async function uploadManagedResource(input: {
@@ -81,6 +111,7 @@ export async function uploadManagedResource(input: {
     input.prefix || 'img',
     input.folder || 'assets'
   )
+  invalidateManagedResourceCache()
 
   return {
     success: true,
@@ -93,12 +124,17 @@ export async function deleteManagedResources(resourceHashes: string[]) {
   assertResourceStorageConfigured()
 
   const deletedBlobCount = await deleteBlobAssets(resourceHashes)
+  invalidateManagedResourceCache()
   return {
     success: true,
     deletedCount: deletedBlobCount,
     deletedBlobCount,
     message: `成功删除 ${deletedBlobCount} 个图片资源`,
   }
+}
+
+function invalidateManagedResourceCache() {
+  delete globalResourceCache.__navsphereManagedResourceCache
 }
 
 export async function checkManagedResourceReferences(resourcePaths: string[]) {

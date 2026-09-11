@@ -9,14 +9,17 @@ import {
 
 export const runtime = 'edge'
 
-export async function GET() {
+export async function GET(request: Request) {
     try {
         const session = await auth()
         if (!session?.user) {
             return new Response('Unauthorized', { status: 401 })
         }
 
-        return NextResponse.json(await listManagedResources())
+        const { searchParams } = new URL(request.url)
+        return NextResponse.json(await listManagedResources({
+            fresh: searchParams.get('fresh') === '1',
+        }))
     } catch (error) {
         console.error('Failed to fetch resources:', error)
         return handleResourceError(error, '图片资源加载失败')
