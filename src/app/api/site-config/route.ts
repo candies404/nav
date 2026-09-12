@@ -10,7 +10,7 @@ const defaultConfig: SiteConfig = {
   },
   appearance: {
     logo: '/logo.png',
-    favicon: '/favicon.ico',
+    favicon: '/favicon',
     theme: 'system'
   },
   navigation: {

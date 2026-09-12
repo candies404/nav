@@ -74,6 +74,7 @@ interface Site {
   name: string
   url: string
   description?: string
+  icon?: string
   enabled?: boolean
   isPrivate?: boolean
   createdAt: string
@@ -109,6 +110,7 @@ function extractSites(navigationItems: Category[]): Site[] {
         name: item.title,
         url: item.href,
         description: item.description,
+        icon: item.icon,
         enabled: item.enabled ?? true,
         isPrivate: item.isPrivate ?? false,
         createdAt: '',
@@ -123,6 +125,7 @@ function extractSites(navigationItems: Category[]): Site[] {
           name: item.title,
           url: item.href,
           description: item.description,
+          icon: item.icon,
           enabled: item.enabled ?? true,
           isPrivate: item.isPrivate ?? false,
           createdAt: '',
@@ -133,6 +136,29 @@ function extractSites(navigationItems: Category[]): Site[] {
   }
 
   return sites
+}
+
+function SiteIcon({ site }: { site: Pick<Site, 'name' | 'icon'> }) {
+  const [failedIcon, setFailedIcon] = useState<string | null>(null)
+  const showIcon = Boolean(site.icon && failedIcon !== site.icon)
+
+  return (
+    <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-white dark:bg-white/5">
+      {showIcon ? (
+        <Image
+          src={site.icon!}
+          alt=""
+          width={20}
+          height={20}
+          unoptimized
+          className="h-5 w-5 object-contain"
+          onError={() => setFailedIcon(site.icon || null)}
+        />
+      ) : (
+        <Icons.link className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+      )}
+    </span>
+  )
 }
 
 export function SiteListClient({
@@ -2079,9 +2105,7 @@ export function SiteListClient({
                       </TableCell>
                       <TableCell className="min-w-0 font-medium">
                         <div className="flex min-w-0 items-center gap-2">
-                          {getSiteCategoryInfo(site.id).categoryName && (
-                            <div className="h-2 w-2 flex-shrink-0 rounded-full bg-primary/20"></div>
-                          )}
+                          <SiteIcon site={site} />
                           <span className="block min-w-0 truncate" title={site.name}>{site.name}</span>
                         </div>
                       </TableCell>
@@ -2186,9 +2210,7 @@ export function SiteListClient({
                     </TableCell>
                     <TableCell className="min-w-0 font-medium">
                       <div className="flex min-w-0 items-center gap-2">
-                        {getSiteCategoryInfo(site.id).categoryName && (
-                          <div className="h-2 w-2 flex-shrink-0 rounded-full bg-primary/20"></div>
-                        )}
+                        <SiteIcon site={site} />
                         <span className="block min-w-0 truncate" title={site.name}>{site.name}</span>
                       </div>
                     </TableCell>
