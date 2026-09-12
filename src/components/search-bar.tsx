@@ -115,6 +115,8 @@ export function SearchBar({
   const [isFocused, setIsFocused] = useState(false)
   const searchRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const highlightedElementRef = useRef<HTMLElement | null>(null)
+  const highlightTimeoutRef = useRef<number | null>(null)
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -125,6 +127,13 @@ export function SearchBar({
 
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  useEffect(() => () => {
+    if (highlightTimeoutRef.current !== null) {
+      window.clearTimeout(highlightTimeoutRef.current)
+    }
+    highlightedElementRef.current?.removeAttribute('data-navigation-search-highlight')
   }, [])
 
   useEffect(() => {
@@ -154,10 +163,33 @@ export function SearchBar({
   const handleItemSelect = (item: NavigationSearchIndexItem) => {
     const element = document.getElementById(getNavigationItemElementId(item.id))
     if (element) {
+      highlightNavigationItem(element)
       element.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
     onSearch('')
     setIsFocused(false)
+  }
+
+  const highlightNavigationItem = (element: HTMLElement) => {
+    if (highlightTimeoutRef.current !== null) {
+      window.clearTimeout(highlightTimeoutRef.current)
+    }
+
+    highlightedElementRef.current?.removeAttribute('data-navigation-search-highlight')
+    element.removeAttribute('data-navigation-search-highlight')
+
+    // Force the browser to restart the highlight animation when the same
+    // search result is selected repeatedly.
+    void element.offsetWidth
+    element.setAttribute('data-navigation-search-highlight', 'true')
+    highlightedElementRef.current = element
+    highlightTimeoutRef.current = window.setTimeout(() => {
+      element.removeAttribute('data-navigation-search-highlight')
+      if (highlightedElementRef.current === element) {
+        highlightedElementRef.current = null
+      }
+      highlightTimeoutRef.current = null
+    }, 2_400)
   }
 
   const openItemLink = (item: NavigationSearchIndexItem) => {
