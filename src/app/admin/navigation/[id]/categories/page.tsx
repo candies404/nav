@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { getAdminNavigationCategories } from '@/lib/admin-read'
 import { CategoriesClient } from './categories-client'
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
 
 export default async function CategoriesPage({
   params,

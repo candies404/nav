@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getFileContent } from '@/lib/storage'
+import { getNavigationContent } from '@/lib/content-cache'
 import { isAuthenticatedRequest } from '@/lib/auth-token'
 import { filterNavigationData, processNavigationData } from '@/lib/data-loader'
 import type {
@@ -10,15 +10,12 @@ import type {
   NavigationSubItem,
 } from '@/types/navigation'
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
 
 export async function GET(request: Request) {
   try {
     const [navigationData, includePrivate] = await Promise.all([
-      getFileContent(
-        'src/navsphere/content/navigation.json',
-        { bypassCache: true }
-      ) as Promise<NavigationDataRaw>,
+      getNavigationContent() as Promise<NavigationDataRaw>,
       isAuthenticatedRequest(request),
     ])
 

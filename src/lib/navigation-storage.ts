@@ -185,7 +185,7 @@ function toNavigationHistorySummaryFromDataSummary(
 }
 
 function stringifyNavigationData(data: NavigationData) {
-  return JSON.stringify(data, null, 2)
+  return JSON.stringify(data)
 }
 
 export function cloneNavigationData(data: NavigationData): NavigationData {

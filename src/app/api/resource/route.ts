@@ -7,7 +7,7 @@ import {
     uploadManagedResource,
 } from '@/lib/resource-storage'
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
 
 export async function GET(request: Request) {
     try {

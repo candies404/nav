@@ -11,7 +11,7 @@ import {
 import { getAdminNavigationSites } from '@/lib/admin-read'
 import { getStorageErrorMessage } from '@/lib/storage'
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
 
 export async function GET(request: Request) {
   try {

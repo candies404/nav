@@ -4,7 +4,7 @@ import { getFileContent, getStorageErrorMessage } from '@/lib/storage'
 import { saveNavigationData } from '@/lib/navigation-storage'
 import type { NavigationData, NavigationItem } from '@/types/navigation'
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
 
 export async function PUT(
   request: Request,

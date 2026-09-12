@@ -19,6 +19,8 @@ type DataCacheEntry = {
 type GetFileContentOptions = {
   bypassCache?: boolean
   maxAgeMs?: number
+  requestTimeoutMs?: number
+  fallbackOnError?: boolean
 }
 
 const MISSING_REDIS_CONFIG_MESSAGE =
@@ -56,6 +58,7 @@ const DATA_ERROR_CACHE_TTL_MS = Number(process.env.NAVSPHERE_DATA_ERROR_CACHE_TT
 const BLOB_CACHE_MAX_AGE_SECONDS = Number(process.env.NAVSPHERE_BLOB_CACHE_MAX_AGE_SECONDS || 31_536_000)
 const DATA_HISTORY_LIMIT = positiveInteger(process.env.NAVSPHERE_DATA_HISTORY_LIMIT, 10)
 const REDIS_REQUEST_TIMEOUT_MS = positiveInteger(process.env.NAVSPHERE_REDIS_REQUEST_TIMEOUT_MS, 15_000)
+const BLOB_REQUEST_TIMEOUT_MS = positiveInteger(process.env.NAVSPHERE_BLOB_REQUEST_TIMEOUT_MS, 15_000)
 const globalCache = globalThis as typeof globalThis & {
   __navsphereDataCache?: Map<string, DataCacheEntry>
   __navsphereDataInflight?: Map<string, Promise<unknown>>
@@ -95,10 +98,14 @@ function getRedisConfig() {
 
 // Upstash REST API accepts Redis commands as JSON arrays, which keeps the
 // storage layer usable in both Node and Edge runtimes without a TCP client.
-async function redisCommand<T>(command: unknown[]): Promise<T | null> {
+async function redisCommand<T>(
+  command: unknown[],
+  requestTimeoutMs = REDIS_REQUEST_TIMEOUT_MS
+): Promise<T | null> {
   const { url, token } = getRedisConfig()
+  const timeoutMs = Math.max(1, Math.floor(requestTimeoutMs))
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), REDIS_REQUEST_TIMEOUT_MS)
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
     const response = await fetch(url, {
@@ -123,7 +130,7 @@ async function redisCommand<T>(command: unknown[]): Promise<T | null> {
     return data.result ?? null
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error(`Redis request timed out after ${REDIS_REQUEST_TIMEOUT_MS}ms`)
+      throw new Error(`Redis request timed out after ${timeoutMs}ms`)
     }
 
     throw error
@@ -256,13 +263,17 @@ export async function getFileContent(path: string, options: GetFileContentOption
     }
   }
 
-  const key = options.bypassCache ? `${dataKey(path)}:fresh` : dataKey(path)
+  const requestTimeoutMs = options.requestTimeoutMs ?? REDIS_REQUEST_TIMEOUT_MS
+  const fallbackOnError = options.fallbackOnError ?? true
+  const requestKey = `${dataKey(path)}:timeout:${requestTimeoutMs}`
+  const modeKey = `${requestKey}:fallback:${fallbackOnError}`
+  const key = options.bypassCache ? `${modeKey}:fresh` : modeKey
   const pendingRequest = dataInflight.get(key)
   if (pendingRequest) {
     return cloneDefault(await pendingRequest)
   }
 
-  const request = loadFileContent(path)
+  const request = loadFileContent(path, requestTimeoutMs, fallbackOnError)
   dataInflight.set(key, request)
 
   try {
@@ -274,9 +285,13 @@ export async function getFileContent(path: string, options: GetFileContentOption
   }
 }
 
-async function loadFileContent(path: string) {
+async function loadFileContent(
+  path: string,
+  requestTimeoutMs: number,
+  fallbackOnError: boolean
+) {
   try {
-    const raw = await redisCommand<string>(['GET', dataKey(path)])
+    const raw = await redisCommand<string>(['GET', dataKey(path)], requestTimeoutMs)
     if (!raw) {
       const defaultContent = getDefaultContent(path)
       setCachedContent(path, defaultContent)
@@ -293,6 +308,7 @@ async function loadFileContent(path: string) {
 
     const defaultContent = getDefaultContent(path)
     setCachedContent(path, defaultContent, DATA_ERROR_CACHE_TTL_MS)
+    if (!fallbackOnError) throw error
     return defaultContent
   }
 }
@@ -305,12 +321,13 @@ export async function commitFile(
   retryCount = 3
 ) {
   const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+  const storedContent = compactJsonContent(path, content)
 
   for (let attempt = 1; attempt <= retryCount; attempt++) {
     try {
-      await redisCommand<string>(['SET', dataKey(path), content])
+      await redisCommand<string>(['SET', dataKey(path), storedContent])
       try {
-        setCachedContent(path, JSON.parse(content))
+        setCachedContent(path, JSON.parse(storedContent))
       } catch {
         dataCache.delete(dataKey(path))
       }
@@ -540,33 +557,53 @@ export async function saveAsset(
   }
 }
 
-export async function listBlobAssets() {
+export async function listBlobAssets(options: { requestTimeoutMs?: number } = {}) {
   if (!hasBlobWriteConfig()) return []
 
   const blobs: BlobAsset[] = []
   let cursor: string | undefined
+  const requestTimeoutMs = Number.isFinite(options.requestTimeoutMs)
+    ? Math.max(1, Math.floor(options.requestTimeoutMs as number))
+    : BLOB_REQUEST_TIMEOUT_MS
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs)
 
-  do {
-    const result = await list({
-      ...getBlobOptions(),
-      cursor,
-      limit: 1000,
-    })
-
-    for (const blob of result.blobs) {
-      blobs.push({
-        pathname: blob.pathname,
-        url: blob.url,
-        downloadUrl: blob.downloadUrl,
-        size: blob.size,
-        uploadedAt: new Date(blob.uploadedAt).toISOString(),
+  try {
+    do {
+      const result = await list({
+        ...getBlobOptions(),
+        cursor,
+        limit: 1000,
+        abortSignal: controller.signal,
       })
-    }
 
-    cursor = result.cursor
-  } while (cursor)
+      for (const blob of result.blobs) {
+        blobs.push({
+          pathname: blob.pathname,
+          url: blob.url,
+          downloadUrl: blob.downloadUrl,
+          size: blob.size,
+          uploadedAt: new Date(blob.uploadedAt).toISOString(),
+        })
+      }
+
+      cursor = result.cursor
+    } while (cursor)
+  } finally {
+    clearTimeout(timeoutId)
+  }
 
   return blobs.sort((a, b) => Date.parse(b.uploadedAt) - Date.parse(a.uploadedAt))
+}
+
+function compactJsonContent(path: string, content: string) {
+  if (!path.toLocaleLowerCase().endsWith('.json')) return content
+
+  try {
+    return JSON.stringify(JSON.parse(content))
+  } catch {
+    return content
+  }
 }
 
 export async function deleteBlobAssets(paths: string[]) {

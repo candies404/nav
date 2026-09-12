@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { getFileContent } from '@/lib/storage'
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
 
 export async function GET() {
   try {

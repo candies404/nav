@@ -5,7 +5,7 @@ import { getFileContent, getStorageErrorMessage } from '@/lib/storage'
 import { cloneNavigationData, saveNavigationData } from '@/lib/navigation-storage'
 import type { NavigationCategory, NavigationData } from '@/types/navigation'
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
 
 export async function GET(
   request: Request,

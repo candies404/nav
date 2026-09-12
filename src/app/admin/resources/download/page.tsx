@@ -1,6 +1,6 @@
 'use client'
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
 
 import Image from 'next/image'
 import { useState } from 'react'

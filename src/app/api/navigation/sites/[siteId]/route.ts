@@ -9,7 +9,7 @@ import {
 } from '@/lib/navigation-site-mutations'
 import { getStorageErrorMessage } from '@/lib/storage'
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
 
 export async function PATCH(
   request: Request,

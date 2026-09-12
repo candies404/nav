@@ -6,7 +6,7 @@ import {
 } from '@/lib/navigation-storage'
 import { getStorageErrorMessage } from '@/lib/storage'
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
 
 export async function GET(
   _request: Request,

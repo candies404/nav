@@ -5,7 +5,8 @@ import { AdminLayoutClient } from './AdminLayoutClient'
 import { Toaster } from "@/registry/new-york/ui/toaster"
 import { Metadata } from 'next'
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
+export const preferredRegion = 'sin1'
 
 
 export const metadata: Metadata = {

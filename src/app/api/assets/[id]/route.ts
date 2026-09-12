@@ -1,6 +1,6 @@
 import { getAsset } from '@/lib/storage'
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
 
 interface RouteParams {
   params: Promise<{ id: string }>

@@ -5,7 +5,7 @@ import { getAdminSiteConfig } from '@/lib/admin-read'
 import type { SiteInfo } from '@/types/site'
 import { revalidateSiteContent } from '@/lib/cache-invalidation'
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
 
 export async function GET(request: Request) {
   try {
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     // 保存到 Redis
     await commitFile(
       'src/navsphere/content/site.json',
-      JSON.stringify(data, null, 2),
+      JSON.stringify(data),
       'Update site configuration'
     )
     revalidateSiteContent()

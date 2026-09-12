@@ -56,6 +56,10 @@ const RESOURCE_LIST_CACHE_TTL_MS = getPositiveInteger(
   process.env.NAVSPHERE_ADMIN_RESOURCE_CACHE_TTL_MS,
   60_000
 )
+const RESOURCE_LIST_REQUEST_TIMEOUT_MS = getPositiveInteger(
+  process.env.NAVSPHERE_ADMIN_RESOURCE_TIMEOUT_MS,
+  2_000
+)
 const globalResourceCache = globalThis as typeof globalThis & {
   __navsphereManagedResourceCache?: {
     value: ManagedResourceList
@@ -73,7 +77,10 @@ export function assertResourceStorageConfigured() {
   }
 }
 
-export async function listManagedResources(options: { fresh?: boolean } = {}) {
+export async function listManagedResources(options: {
+  fresh?: boolean
+  requestTimeoutMs?: number
+} = {}) {
   assertResourceStorageConfigured()
 
   const cached = globalResourceCache.__navsphereManagedResourceCache
@@ -81,7 +88,9 @@ export async function listManagedResources(options: { fresh?: boolean } = {}) {
     return cached.value
   }
 
-  const blobs = await listBlobAssets()
+  const blobs = await listBlobAssets({
+    requestTimeoutMs: options.requestTimeoutMs ?? RESOURCE_LIST_REQUEST_TIMEOUT_MS,
+  })
   const result: ManagedResourceList = {
     commit: '',
     generated: new Date().toISOString(),
@@ -109,12 +118,16 @@ export async function listManagedResources(options: { fresh?: boolean } = {}) {
 
 export async function getManagedResourcePage(options: {
   fresh?: boolean
+  requestTimeoutMs?: number
   page?: number
   pageSize?: number
   query?: string | null
   kind?: string | null
 } = {}): Promise<ManagedResourcePage> {
-  const resources = await listManagedResources({ fresh: options.fresh })
+  const resources = await listManagedResources({
+    fresh: options.fresh,
+    requestTimeoutMs: options.requestTimeoutMs,
+  })
   const query = options.query?.trim().toLocaleLowerCase() || ''
   const kind: ManagedResourceKind = options.kind === 'manual' || options.kind === 'cached'
     ? options.kind

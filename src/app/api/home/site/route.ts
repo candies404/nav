@@ -1,14 +1,11 @@
 import { NextResponse } from 'next/server'
-import { getFileContent } from '@/lib/storage'
+import { getSiteContent } from '@/lib/content-cache'
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
 
 export async function GET() {
   try {
-    const siteData = await getFileContent(
-      'src/navsphere/content/site.json',
-      { bypassCache: true }
-    )
+    const siteData = await getSiteContent()
     return NextResponse.json(siteData, {
       headers: {
         'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',

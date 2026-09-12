@@ -1,4 +1,4 @@
-import { getFileContent } from '@/lib/storage'
+import { getNavigationContent, getSiteContent } from '@/lib/content-cache'
 import type {
   NavigationCategory,
   NavigationData,
@@ -6,12 +6,9 @@ import type {
 } from '@/types/navigation'
 import type { SiteConfig } from '@/types/site'
 
-const NAVIGATION_PATH = 'src/navsphere/content/navigation.json'
-const SITE_PATH = 'src/navsphere/content/site.json'
-
-export const ADMIN_READ_CACHE_TTL_MS = getPositiveInteger(
-  process.env.NAVSPHERE_ADMIN_READ_CACHE_TTL_MS,
-  10_000
+export const ADMIN_READ_TIMEOUT_MS = getPositiveInteger(
+  process.env.NAVSPHERE_ADMIN_READ_TIMEOUT_MS,
+  5_000
 )
 
 type AdminReadOptions = {
@@ -49,9 +46,9 @@ type AdminSiteListInput = AdminReadOptions & {
 }
 
 export async function getAdminNavigationData(options: AdminReadOptions = {}) {
-  return getFileContent(NAVIGATION_PATH, {
-    bypassCache: options.fresh,
-    maxAgeMs: ADMIN_READ_CACHE_TTL_MS,
+  return getNavigationContent({
+    fresh: options.fresh,
+    requestTimeoutMs: ADMIN_READ_TIMEOUT_MS,
   }) as Promise<NavigationData>
 }
 
@@ -183,9 +180,9 @@ export async function getAdminNavigationSites(input: AdminSiteListInput = {}) {
 }
 
 export async function getAdminSiteConfig(options: AdminReadOptions = {}) {
-  return getFileContent(SITE_PATH, {
-    bypassCache: options.fresh,
-    maxAgeMs: ADMIN_READ_CACHE_TTL_MS,
+  return getSiteContent({
+    fresh: options.fresh,
+    requestTimeoutMs: ADMIN_READ_TIMEOUT_MS,
   }) as Promise<SiteConfig>
 }
 

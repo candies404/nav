@@ -1,7 +1,7 @@
 import { getAdminNavigationSites } from '@/lib/admin-read'
 import { SiteListClient } from './site-list-client'
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
 
 type SiteListPageProps = {
   searchParams: Promise<{

@@ -2,7 +2,7 @@ import { getManagedResourcePage } from '@/lib/resource-storage'
 import { mapResourceMetadata, type ResourceListPage } from '@/services/resource-api'
 import { ResourceManagementClient } from './resource-management-client'
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
 
 export default async function ResourceManagementPage() {
   let initialData: ResourceListPage = {

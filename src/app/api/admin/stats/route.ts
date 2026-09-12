@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { getAdminStats, type AdminStats } from '@/lib/admin-read'
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
 
 const STATS_CACHE_TTL_MS = Number(process.env.NAVSPHERE_ADMIN_STATS_CACHE_TTL_MS || 10_000)
 const globalStatsCache = globalThis as typeof globalThis & {
