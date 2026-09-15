@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { Github, Menu } from 'lucide-react'
 import type { NavigationData, NavigationSearchIndex, NavigationSearchIndexItem } from '@/types/navigation'
@@ -9,7 +9,8 @@ import { Sidebar } from '@/components/sidebar'
 import { SearchBar } from '@/components/search-bar'
 import { ModeToggle } from '@/components/mode-toggle'
 import { Button } from '@/registry/new-york/ui/button'
-import { cn } from '@/lib/utils'
+import { Sheet, SheetContent, SheetTitle, SheetDescription, SheetTrigger } from '@/registry/new-york/ui/sheet'
+import { useNavigationSidebar } from '@/components/use-navigation-sidebar'
 
 interface NavigationShellProps {
   navigationOutline: NavigationData
@@ -30,6 +31,14 @@ export function NavigationShell({
   const [isSearchLoading, setIsSearchLoading] = useState(false)
   const [searchError, setSearchError] = useState(false)
   const searchRequestRef = useRef<Promise<void> | null>(null)
+  const { activeId, expandedCategories, toggleCategory } = useNavigationSidebar(navigationOutline)
+
+  useEffect(() => {
+    const desktop = window.matchMedia('(min-width: 1024px)')
+    const closeOnDesktop = () => { if (desktop.matches) setIsSidebarOpen(false) }
+    desktop.addEventListener('change', closeOnDesktop)
+    return () => desktop.removeEventListener('change', closeOnDesktop)
+  }, [])
 
   const loadSearchData = useCallback(() => {
     if (searchData || searchRequestRef.current) return
@@ -76,28 +85,10 @@ export function NavigationShell({
           navigationData={navigationOutline}
           siteInfo={siteData}
           className="sticky top-0 h-screen"
+          activeId={activeId}
+          expandedCategories={expandedCategories}
+          onToggleCategory={toggleCategory}
         />
-      </div>
-
-      <div
-        className={cn(
-          'fixed inset-0 z-50 bg-background/80 backdrop-blur-sm transition-all lg:hidden',
-          isSidebarOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
-        )}
-        aria-hidden={!isSidebarOpen}
-      >
-        <div
-          className={cn(
-            'fixed inset-y-0 right-0 w-[85vw] max-w-xs bg-background shadow-lg transition-transform duration-200 ease-in-out',
-            isSidebarOpen ? 'translate-x-0' : 'translate-x-full'
-          )}
-        >
-          <Sidebar
-            navigationData={navigationOutline}
-            siteInfo={siteData}
-            onClose={() => setIsSidebarOpen(false)}
-          />
-        </div>
       </div>
 
       <main className="min-w-0 flex-1">
@@ -131,16 +122,20 @@ export function NavigationShell({
                   <Github className="h-5 w-5" />
                 </Button>
               </Link>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9 sm:h-10 sm:w-10 lg:hidden"
-                onClick={() => setIsSidebarOpen(open => !open)}
-                aria-label={isSidebarOpen ? '关闭侧边栏' : '打开侧边栏'}
-                aria-expanded={isSidebarOpen}
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
+              <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-10 sm:w-10 lg:hidden" aria-label="打开分类导航">
+                    <Menu className="h-5 w-5" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="right" className="max-w-xs p-0 sm:p-0">
+                  <SheetTitle className="sr-only">分类导航</SheetTitle>
+                  <SheetDescription className="sr-only">选择分类跳转，按 Escape 关闭导航。</SheetDescription>
+                  <Sidebar navigationData={navigationOutline} siteInfo={siteData}
+                    activeId={activeId} expandedCategories={expandedCategories} onToggleCategory={toggleCategory}
+                    onClose={() => setIsSidebarOpen(false)} />
+                </SheetContent>
+              </Sheet>
             </div>
           </div>
         </div>

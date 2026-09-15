@@ -11,6 +11,7 @@ type SiteListPageProps = {
     status?: string | string[]
     page?: string | string[]
     pageSize?: string | string[]
+    editId?: string | string[]
   }>
 }
 
@@ -22,6 +23,7 @@ export default async function SiteListPage({ searchParams }: SiteListPageProps) 
   const status = getFirstValue(params.status) || 'all'
   const page = getPositiveInteger(params.page, 1)
   const pageSize = getPositiveInteger(params.pageSize, 25)
+  const editId = getFirstValue(params.editId)
   const initialData = await getAdminNavigationSites({
     categoryId,
     subCategoryId,
@@ -29,6 +31,7 @@ export default async function SiteListPage({ searchParams }: SiteListPageProps) 
     status,
     page,
     pageSize,
+    siteId: editId,
   })
 
   return (
@@ -38,6 +41,7 @@ export default async function SiteListPage({ searchParams }: SiteListPageProps) 
       initialSubCategoryId={subCategoryId}
       initialQuery={query}
       initialStatus={status}
+      initialEditId={editId}
     />
   )
 }

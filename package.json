@@ -11,6 +11,7 @@
     "postbuild": "node scripts/prepare-standalone-assets.mjs",
     "start": "node .next/standalone/server.js",
     "lint": "next lint",
+    "test:ux": "node --test tests/ux-regressions.test.cjs",
     "clean": "rm -rf .next",
     "docker:build": "docker build -f docker/Dockerfile -t navsphere:latest .",
     "docker:dev": "docker-compose -f docker/docker-compose.yml up -d",

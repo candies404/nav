@@ -36,6 +36,7 @@ export type AdminNavigationCategories = {
 }
 
 type AdminSiteListInput = AdminReadOptions & {
+  siteId?: string
   categoryId?: string | null
   subCategoryId?: string | null
   query?: string | null
@@ -108,7 +109,7 @@ export async function getAdminNavigationSites(input: AdminSiteListInput = {}) {
       const matchesStatus = status === 'all'
         || (status === 'enabled' && item.enabled !== false)
         || (status === 'disabled' && item.enabled === false)
-      return matchesQuery && matchesStatus
+      return matchesQuery && matchesStatus && (!input.siteId || item.id === input.siteId)
     })
     siteCount += filteredItems.length
     return filteredItems

@@ -56,7 +56,7 @@ export function NavigationContent({
 
                 {category.subCategories && category.subCategories.length > 0 && (
                   category.subCategories.map((subCategory) => (
-                    <div key={subCategory.id} id={subCategory.id} className="space-y-3">
+                    <div key={subCategory.id} id={subCategory.id} className="space-y-3 scroll-m-20">
                       <h3 className="text-sm font-medium text-muted-foreground">
                         {subCategory.title}
                       </h3>

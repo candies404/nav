@@ -69,6 +69,12 @@ export function AdminDashboard({ initialStats }: { initialStats: AdminStats }) {
 
   const dashboardItems = [
     {
+      title: '待处理清单',
+      icon: Activity,
+      href: '/admin/quality',
+      description: '检测失效链接，补充图标和描述，查看重复网址'
+    },
+    {
       title: '站点设置',
       icon: Settings,
       href: '/admin/site',

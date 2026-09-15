@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
@@ -27,7 +27,6 @@ import {
   Laptop,
   Star,
   Video,
-  X,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -35,6 +34,9 @@ interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
   navigationData: NavigationData
   siteInfo: SiteConfig
   onClose?: () => void
+  activeId: string
+  expandedCategories: Record<string, boolean>
+  onToggleCategory: (id: string) => void
 }
 
 const SIDEBAR_ICONS: Record<string, LucideIcon> = {
@@ -55,11 +57,15 @@ const SIDEBAR_ICONS: Record<string, LucideIcon> = {
   Video,
 }
 
-export function Sidebar({ className, navigationData, siteInfo, onClose }: SidebarProps) {
+export function Sidebar({ className, navigationData, siteInfo, onClose, activeId, expandedCategories, onToggleCategory }: SidebarProps) {
+  const sidebarId = useId()
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id)
     if (element) {
-      element.scrollIntoView({ behavior: 'smooth' })
+      element.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        block: 'start',
+      })
       onClose?.()
     }
   }
@@ -87,24 +93,9 @@ export function Sidebar({ className, navigationData, siteInfo, onClose }: Sideba
     return <IconComponent className="h-4 w-4" />;
   }
 
-  // 使用对象存储每个分类的展开状态
-  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>(() => {
-    return navigationData.navigationItems.reduce((acc, category) => {
-      acc[category.id] = false
-      return acc
-    }, {} as Record<string, boolean>)
-  })
-
-  const toggleCategory = (categoryId: string) => {
-    setExpandedCategories(prev => ({
-      ...prev,
-      [categoryId]: !prev[categoryId]
-    }))
-  }
-
   return (
     <div className={cn("w-full bg-background lg:w-64", className)}>
-      <div className="flex h-14 items-center px-4">
+      <div className={cn('flex h-14 items-center px-4', onClose && 'pr-12')}>
         <Link href="/" className="flex min-w-0 items-center gap-2 font-semibold">
           {siteInfo.appearance.logo ? (
             <Image
@@ -120,28 +111,20 @@ export function Sidebar({ className, navigationData, siteInfo, onClose }: Sideba
           <span className="truncate">{siteInfo.basic.title}</span>
         </Link>
 
-        {/* 移动模式下的关闭按钮 */}
-        {onClose && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="ml-auto lg:hidden"
-            onClick={onClose}
-            aria-label="关闭侧边栏"
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        )}
       </div>
 
       <ScrollArea className="h-[calc(100svh-3.5rem)] px-3 py-2">
-        <div className="space-y-1">
+        <nav className="space-y-1" aria-label="网站分类">
           {navigationData.navigationItems.map((category) => (
             <div key={category.id} className="py-2">
               <div className="flex items-center">
                 <Button
                   variant="ghost"
-                  className="min-w-0 flex-1 justify-start gap-2 font-medium text-muted-foreground hover:text-foreground cursor-pointer"
+                  className={cn(
+                    'min-w-0 flex-1 justify-start gap-2 font-medium text-muted-foreground hover:text-foreground cursor-pointer',
+                    (activeId === category.id || category.subCategories?.some(sub => sub.id === activeId)) && 'bg-accent text-accent-foreground'
+                  )}
+                  aria-current={activeId === category.id ? 'location' : undefined}
                   onClick={() => handleCategoryClick(category.id)}
                 >
                   {renderIcon(category.icon)}
@@ -153,7 +136,10 @@ export function Sidebar({ className, navigationData, siteInfo, onClose }: Sideba
                     variant="ghost"
                     size="sm"
                     className="px-2 hover:bg-transparent cursor-pointer"
-                    onClick={() => toggleCategory(category.id)}
+                    onClick={() => onToggleCategory(category.id)}
+                    aria-label={`${expandedCategories[category.id] ? '收起' : '展开'}${category.title}`}
+                    aria-expanded={Boolean(expandedCategories[category.id])}
+                    aria-controls={`${sidebarId}-${category.id}`}
                   >
                     {expandedCategories[category.id] ? (
                       <ChevronDown className="h-4 w-4 text-muted-foreground" />
@@ -166,20 +152,17 @@ export function Sidebar({ className, navigationData, siteInfo, onClose }: Sideba
 
               {category.subCategories && category.subCategories.length > 0 && (
                 <div
-                  className={cn(
-                    "mt-1 ml-4 space-y-1 overflow-hidden transition-all duration-200 ease-in-out",
-                    expandedCategories[category.id] ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"
-                  )}
+                  id={`${sidebarId}-${category.id}`}
+                  hidden={!expandedCategories[category.id]}
+                  className="mt-1 ml-4 space-y-1"
                 >
                   {category.subCategories.map((subCategory) => (
                     <Button
                       key={subCategory.id}
                       variant="ghost"
-                      className="w-full justify-start pl-6 text-sm text-muted-foreground/80 hover:text-foreground cursor-pointer"
-                      onClick={() => {
-                        scrollToSection(subCategory.id)
-                        onClose?.()
-                      }}
+                      className={cn('w-full justify-start pl-6 text-sm text-muted-foreground/80 hover:text-foreground cursor-pointer', activeId === subCategory.id && 'bg-accent text-accent-foreground font-medium')}
+                      aria-current={activeId === subCategory.id ? 'location' : undefined}
+                      onClick={() => scrollToSection(subCategory.id)}
                     >
                       <span className="truncate">{subCategory.title}</span>
                     </Button>
@@ -188,7 +171,7 @@ export function Sidebar({ className, navigationData, siteInfo, onClose }: Sideba
               )}
             </div>
           ))}
-        </div>
+        </nav>
       </ScrollArea>
     </div>
   )

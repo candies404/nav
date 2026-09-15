@@ -1,6 +1,10 @@
 'use client'
 
 import Image from 'next/image'
+import { useSiteMetadata } from '@/components/admin/use-site-metadata'
+import { readAdminResponse, errorMessage } from '@/lib/admin-api-response'
+import { isHttpUrl } from '@/lib/site-form-state'
+import { DuplicateSiteNotice } from '@/components/admin/duplicate-site-notice'
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from "@/registry/new-york/ui/button"
 import { useToast } from "@/registry/new-york/hooks/use-toast"
@@ -92,13 +96,7 @@ type SiteListResponse = {
   totalPages?: number
 }
 
-async function readMutationResponse<T>(response: Response, fallbackMessage: string): Promise<T> {
-  const data = await response.json().catch(() => null) as (T & { error?: string }) | null
-  if (!response.ok || !data) {
-    throw new Error(data?.error || fallbackMessage)
-  }
-  return data
-}
+const readMutationResponse = readAdminResponse
 
 function extractSites(navigationItems: Category[]): Site[] {
   const sites: Site[] = []
@@ -167,12 +165,14 @@ export function SiteListClient({
   initialSubCategoryId,
   initialQuery,
   initialStatus,
+  initialEditId,
 }: {
   initialData: SiteListResponse
   initialCategoryId: string
   initialSubCategoryId: string
   initialQuery: string
   initialStatus: string
+  initialEditId?: string
 }) {
   const { toast } = useToast()
   const [sites, setSites] = useState<Site[]>(() => extractSites(initialData.navigationItems || []))
@@ -184,6 +184,9 @@ export function SiteListClient({
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [editingSite, setEditingSite] = useState<Site | null>(null)
+  const editingSiteIdRef = useRef(editingSite?.id)
+  editingSiteIdRef.current = editingSite?.id
+  const openedEditId = useRef('')
   const [navigationData, setNavigationData] = useState<Category[]>(initialData.navigationItems || [])
   const [totalSiteCount, setTotalSiteCount] = useState(initialData.totalSiteCount ?? initialData.siteCount ?? 0)
   const [resultSiteCount, setResultSiteCount] = useState(initialData.siteCount ?? 0)
@@ -214,14 +217,8 @@ export function SiteListClient({
   const [showBatchMoveDialog, setShowBatchMoveDialog] = useState(false)
   const [batchMoveCategoryId, setBatchMoveCategoryId] = useState('')
   const [batchMoveSubCategoryId, setBatchMoveSubCategoryId] = useState('none')
-  const [isFetchingAddMetadata, setIsFetchingAddMetadata] = useState(false)
-  const [isFetchingEditMetadata, setIsFetchingEditMetadata] = useState(false)
   const isInitialLoadingRef = useRef(false)
   const skipInitialFilterFetchRef = useRef(true)
-  const lastFetchedAddUrl = useRef<string>('')
-  const lastFetchedEditUrl = useRef<string>('')
-  const isFetchingAddMetadataRef = useRef(false)
-  const isFetchingEditMetadataRef = useRef(false)
   const siteRequestSequenceRef = useRef(0)
   const [newSite, setNewSite] = useState({
     name: '',
@@ -243,6 +240,13 @@ export function SiteListClient({
     enabled: true,
     isPrivate: false
   })
+
+  const addMetadata = useSiteMetadata(newSite, setNewSite, showAddDialog && !isAddingSubmitting)
+  const editMetadata = useSiteMetadata(editSite, setEditSite, showEditDialog && !isEditingSubmitting, editingSite?.url)
+  const isFetchingAddMetadata = addMetadata.loading
+  const isFetchingEditMetadata = editMetadata.loading
+  const [addError, setAddError] = useState('')
+  const [editError, setEditError] = useState('')
 
   const loadSiteList = useCallback(async (
     categoryId: string,
@@ -267,8 +271,7 @@ export function SiteListClient({
     if (options.fresh) searchParams.set('fresh', '1')
     const queryString = searchParams.toString()
     const response = await fetch(`/api/navigation/sites${queryString ? `?${queryString}` : ''}`)
-    if (!response.ok) throw new Error('Failed to fetch')
-    return response.json() as Promise<SiteListResponse>
+    return readAdminResponse<SiteListResponse>(response, '获取站点列表失败')
   }, [])
 
   const fetchSites = useCallback(async (fresh = true) => {
@@ -300,7 +303,7 @@ export function SiteListClient({
       console.error('Fetch error:', error);
       toast({
         title: "错误",
-        description: "获取数据失败",
+        description: errorMessage(error, '获取数据失败'),
         variant: "destructive"
       });
       setSites([]);
@@ -528,6 +531,10 @@ export function SiteListClient({
   // 键盘快捷键支持
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target instanceof Element ? event.target : null
+      if (event.defaultPrevented || event.isComposing ||
+        target?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"]') ||
+        document.querySelector('[role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"]')) return
       // Delete 键删除选中的站点
       if (event.key === 'Delete' && selectedSites.length > 0 && !showDeleteDialog) {
         event.preventDefault()
@@ -539,7 +546,7 @@ export function SiteListClient({
         setSelectedSites([])
       }
       // Ctrl+A 处理
-      if (event.ctrlKey && event.key === 'a') {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
         const activeElement = document.activeElement
         const isInputFocused = activeElement && (
           activeElement.tagName === 'INPUT' ||
@@ -623,15 +630,19 @@ export function SiteListClient({
       return
     }
 
-    if (!newSite.name || !newSite.url || !newSite.categoryId) {
+    if (!newSite.name.trim() || !newSite.url.trim() || !newSite.categoryId) {
+      const missing = [!newSite.name.trim() && '站点名称', !newSite.url.trim() && '站点链接', !newSite.categoryId && '所属分类'].filter(Boolean)
+      const message = `请填写${missing.join('、')}`
+      setAddError(message)
       toast({
         title: "错误",
-        description: "请填写必填字段",
+        description: message,
         variant: "destructive"
       })
       return
     }
 
+    setAddError('')
     setIsAddingSubmitting(true)
     try {
       const response = await fetch('/api/navigation/sites', {
@@ -660,7 +671,8 @@ export function SiteListClient({
         description: "站点添加成功",
       })
 
-      // Reset form and close dialog
+      // Reset only after a successful save.
+      addMetadata.reset()
       setNewSite({
         name: '',
         url: '',
@@ -674,10 +686,11 @@ export function SiteListClient({
       setShowAddDialog(false)
 
     } catch (error) {
+      setAddError(errorMessage(error, '添加站点失败'))
       console.error('Add site error:', error)
       toast({
         title: "错误",
-        description: "添加站点失败",
+        description: errorMessage(error, '添加站点失败'),
         variant: "destructive"
       })
     } finally {
@@ -691,15 +704,19 @@ export function SiteListClient({
       return
     }
 
-    if (!editSite.name || !editSite.url || !editSite.categoryId || !editingSite) {
+    if (!editSite.name.trim() || !editSite.url.trim() || !editSite.categoryId || !editingSite) {
+      const missing = [!editSite.name.trim() && '站点名称', !editSite.url.trim() && '站点链接', !editSite.categoryId && '所属分类'].filter(Boolean)
+      const message = !editingSite ? '站点已不存在，请刷新列表' : `请填写${missing.join('、')}`
+      setEditError(message)
       toast({
         title: "错误",
-        description: "请填写必填字段",
+        description: message,
         variant: "destructive"
       })
       return
     }
 
+    setEditError('')
     setIsEditingSubmitting(true)
     try {
       const response = await fetch(`/api/navigation/sites/${encodeURIComponent(editingSite.id)}`, {
@@ -719,13 +736,7 @@ export function SiteListClient({
         }),
       })
 
-      const result = await response.json().catch(() => null) as {
-        item?: NavigationSubItem
-        error?: string
-      } | null
-      if (!response.ok || !result?.item) {
-        throw new Error(result?.error || 'Failed to save')
-      }
+      await readMutationResponse<{ item: NavigationSubItem }>(response, '更新站点失败')
 
       await fetchSites()
 
@@ -749,10 +760,11 @@ export function SiteListClient({
       setShowEditDialog(false)
 
     } catch (error) {
+      setEditError(errorMessage(error, '更新站点失败'))
       console.error('Edit site error:', error)
       toast({
         title: "错误",
-        description: "更新站点失败",
+        description: errorMessage(error, '更新站点失败'),
         variant: "destructive"
       })
     } finally {
@@ -797,6 +809,8 @@ export function SiteListClient({
       }
     }
 
+    editMetadata.reset()
+    setEditError('')
     setEditSite({
       name: site.name,
       url: site.url,
@@ -809,6 +823,15 @@ export function SiteListClient({
     })
     setShowEditDialog(true)
   }
+
+  useEffect(() => {
+    if (!initialEditId || openedEditId.current === initialEditId) return
+    const site = sites.find(item => item.id === initialEditId)
+    if (site) {
+      openedEditId.current = initialEditId
+      openEditDialog(site)
+    }
+  }, [initialEditId, sites])
 
   const handleDeleteSite = async () => {
     if (!deletingSite) return
@@ -836,7 +859,7 @@ export function SiteListClient({
       console.error('Delete site error:', error)
       toast({
         title: "错误",
-        description: "删除站点失败",
+        description: errorMessage(error, '删除站点失败'),
         variant: "destructive"
       })
     }
@@ -900,121 +923,18 @@ export function SiteListClient({
     </div>
   )
 
-  const isValidUrl = useCallback((string: string): boolean => {
-    try {
-      new URL(string)
-      return true
-    } catch {
-      return false
-    }
-  }, [])
-
-  const fetchWebsiteMetadata = useCallback(async (url: string, isEdit: boolean = false, forceUpdate: boolean = false) => {
-    const setFetching = isEdit ? setIsFetchingEditMetadata : setIsFetchingAddMetadata
-    const setSite = isEdit ? setEditSite : setNewSite
-    const site = isEdit ? editSite : newSite
-    const fetchingRef = isEdit ? isFetchingEditMetadataRef : isFetchingAddMetadataRef
-
-    if (fetchingRef.current) return
-
-    fetchingRef.current = true
-    setFetching(true)
-    try {
-      const response = await fetch('/api/website-metadata', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ url }),
-      })
-
-      if (!response.ok) {
-        throw new Error('获取网站信息失败')
-      }
-
-      const metadata = await response.json()
-
-      // 根据forceUpdate决定是否覆盖已有信息
-      const updates: Partial<{ name: string; description: string; icon: string }> = {}
-      if (forceUpdate || !site.name) {
-        updates.name = metadata.title
-      }
-      if (forceUpdate || !site.description) {
-        updates.description = metadata.description
-      }
-      if ((forceUpdate || !site.icon) && metadata.icon) {
-        updates.icon = metadata.icon
-      }
-
-      if (Object.keys(updates).length > 0) {
-        setSite({ ...site, ...updates })
-        toast({
-          title: "成功",
-          description: "已自动获取网站信息"
-        })
-      } else {
-        toast({
-          title: "提示",
-          description: "网站信息已是最新，无需更新"
-        })
-      }
-    } catch (error) {
-      console.error('Failed to fetch website metadata:', error)
-      toast({
-        title: "提示",
-        description: "自动获取网站信息失败，请手动填写",
-        variant: "destructive"
-      })
-    }
-
-    // 确保在所有操作完成后设置loading状态为false
-    // 使用setTimeout确保状态更新不被批处理影响
-    setTimeout(() => {
-      fetchingRef.current = false
-      setFetching(false)
-    }, 0)
-  }, [editSite, newSite, toast])
-
-  // 监听添加站点URL变化，自动获取网站信息
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (newSite.url &&
-        isValidUrl(newSite.url) &&
-        showAddDialog &&
-        !isFetchingAddMetadataRef.current &&
-        newSite.url !== lastFetchedAddUrl.current) {
-        lastFetchedAddUrl.current = newSite.url
-        fetchWebsiteMetadata(newSite.url, false, true)
-      }
-    }, 1000) // 延迟1秒执行，避免频繁请求
-
-    return () => clearTimeout(timeoutId)
-  }, [fetchWebsiteMetadata, isValidUrl, newSite.url, showAddDialog])
-
-  // 监听编辑站点URL变化，自动获取网站信息
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (editSite.url &&
-        isValidUrl(editSite.url) &&
-        showEditDialog &&
-        editingSite &&
-        !isFetchingEditMetadataRef.current &&
-        editSite.url !== lastFetchedEditUrl.current) {
-        // 只有当URL与原始URL不同时才自动获取
-        if (editSite.url !== editingSite.url) {
-          lastFetchedEditUrl.current = editSite.url
-          fetchWebsiteMetadata(editSite.url, true, true)
-        }
-      }
-    }, 1000)
-
-    return () => clearTimeout(timeoutId)
-  }, [editSite.url, editingSite, fetchWebsiteMetadata, isValidUrl, showEditDialog])
+  const isValidUrl = isHttpUrl
+  const fetchWebsiteMetadata = (url: string, isEdit = false) =>
+    (isEdit ? editMetadata : addMetadata).fetchMetadata(url)
 
   const handleIconUpload = async (file: File, isEdit: boolean = false) => {
     const setUploading = isEdit ? setIsUploadingEditIcon : setIsUploadingAddIcon
     const setSite = isEdit ? setEditSite : setNewSite
     const site = isEdit ? editSite : newSite
+    const formId = editingSite?.id
+    const uploadedUrl = site.url
+    const initialIcon = site.icon
+    ;(isEdit ? editMetadata : addMetadata).markEdited('icon')
 
     try {
       setUploading(true)
@@ -1022,7 +942,8 @@ export function SiteListClient({
       const data = await uploadResourceImage(await fileToDataUrl(file))
 
       if (data.imageUrl) {
-        setSite({ ...site, icon: data.imageUrl })
+        setSite(current => current.url === uploadedUrl && current.icon === initialIcon && (!isEdit || editingSiteIdRef.current === formId)
+          ? { ...current, icon: data.imageUrl! } : current)
         toast({
           title: "成功",
           description: "图标上传成功",
@@ -1280,23 +1201,7 @@ export function SiteListClient({
             </Button>
 
             <Dialog open={showAddDialog} onOpenChange={(open) => {
-              if (open) {
-                // 重置表单
-                setNewSite({
-                  name: '',
-                  url: '',
-                  description: '',
-                  icon: '',
-                  categoryId: '',
-                  subCategoryId: '',
-                  enabled: true,
-                  isPrivate: false
-                })
-                lastFetchedAddUrl.current = ''
-                setShowAddDialog(true)
-              } else if (!isAddingSubmitting) {
-                setShowAddDialog(false)
-              }
+              if (!isAddingSubmitting) setShowAddDialog(open)
             }}>
               <DialogTrigger asChild>
                 <Button className="w-full sm:w-auto">
@@ -1304,10 +1209,12 @@ export function SiteListClient({
                   添加站点
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-[425px]">
+              <DialogContent className="sm:max-w-[425px]" data-preserve-form="true">
                 <DialogHeader>
                   <DialogTitle>添加站点</DialogTitle>
                 </DialogHeader>
+                <FormSaveError message={addError || addMetadata.error} />
+                <DuplicateSiteNotice url={newSite.url} enabled={showAddDialog}  />
                 <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
                     <Label htmlFor="url">站点链接 *</Label>
@@ -1331,7 +1238,8 @@ export function SiteListClient({
                         variant="outline"
                         size="sm"
                         disabled={!newSite.url || !isValidUrl(newSite.url) || isFetchingAddMetadata || isAddingSubmitting}
-                        onClick={() => fetchWebsiteMetadata(newSite.url, false, true)}
+                        aria-label={isFetchingAddMetadata ? '正在获取网站信息' : '重新获取网站信息'}
+                        onClick={() => fetchWebsiteMetadata(newSite.url, false)}
                       >
                         {isFetchingAddMetadata ? (
                           <Icons.loader2 className="h-4 w-4 animate-spin" />
@@ -1341,7 +1249,7 @@ export function SiteListClient({
                       </Button>
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      输入完整的网站链接后，系统将自动获取网站标题、描述和图标
+                      自动补充标题、描述和图标；手动修改过的字段会保留
                     </div>
                   </div>
                   <div className="grid gap-2">
@@ -1349,7 +1257,7 @@ export function SiteListClient({
                     <Input
                       id="name"
                       value={newSite.name}
-                      onChange={(e) => setNewSite({ ...newSite, name: e.target.value })}
+                      onChange={(e) => { addMetadata.markEdited('name'); setNewSite(current => ({ ...current, name: e.target.value })) }}
                       placeholder="站点名称（可自动获取）"
                       disabled={isAddingSubmitting}
                     />
@@ -1361,7 +1269,7 @@ export function SiteListClient({
                         <Input
                           id="icon"
                           value={newSite.icon}
-                          onChange={(e) => setNewSite({ ...newSite, icon: e.target.value })}
+                          onChange={(e) => { addMetadata.markEdited('icon'); setNewSite(current => ({ ...current, icon: e.target.value })) }}
                           placeholder="图标URL（可自动获取）"
                           disabled={isAddingSubmitting}
                         />
@@ -1476,7 +1384,7 @@ export function SiteListClient({
                     <Textarea
                       id="description"
                       value={newSite.description}
-                      onChange={(e) => setNewSite({ ...newSite, description: e.target.value })}
+                      onChange={(e) => { addMetadata.markEdited('description'); setNewSite(current => ({ ...current, description: e.target.value })) }}
                       placeholder="输入站点描述（可选）"
                       className="resize-none"
                       disabled={isAddingSubmitting}
@@ -1727,10 +1635,12 @@ export function SiteListClient({
                 setShowEditDialog(false)
               }
             }}>
-              <DialogContent className="sm:max-w-[425px]">
+              <DialogContent className="sm:max-w-[425px]" data-preserve-form="true">
                 <DialogHeader>
                   <DialogTitle>编辑站点</DialogTitle>
                 </DialogHeader>
+                <FormSaveError message={editError || editMetadata.error} />
+                <DuplicateSiteNotice url={editSite.url} enabled={showEditDialog} excludeId={editingSite?.id} />
                 <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
                     <Label htmlFor="edit-url">站点链接 *</Label>
@@ -1754,7 +1664,8 @@ export function SiteListClient({
                         variant="outline"
                         size="sm"
                         disabled={!editSite.url || !isValidUrl(editSite.url) || isFetchingEditMetadata || isEditingSubmitting}
-                        onClick={() => fetchWebsiteMetadata(editSite.url, true, true)}
+                        aria-label={isFetchingEditMetadata ? '正在获取网站信息' : '重新获取网站信息'}
+                        onClick={() => fetchWebsiteMetadata(editSite.url, true)}
                       >
                         {isFetchingEditMetadata ? (
                           <Icons.loader2 className="h-4 w-4 animate-spin" />
@@ -1764,7 +1675,7 @@ export function SiteListClient({
                       </Button>
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      输入完整的网站链接后，系统将自动获取网站标题、描述和图标
+                      自动补充标题、描述和图标；手动修改过的字段会保留
                     </div>
                   </div>
                   <div className="grid gap-2">
@@ -1772,7 +1683,7 @@ export function SiteListClient({
                     <Input
                       id="edit-name"
                       value={editSite.name}
-                      onChange={(e) => setEditSite({ ...editSite, name: e.target.value })}
+                      onChange={(e) => { editMetadata.markEdited('name'); setEditSite(current => ({ ...current, name: e.target.value })) }}
                       placeholder="站点名称（可自动获取）"
                       disabled={isEditingSubmitting}
                     />
@@ -1784,7 +1695,7 @@ export function SiteListClient({
                         <Input
                           id="edit-icon"
                           value={editSite.icon}
-                          onChange={(e) => setEditSite({ ...editSite, icon: e.target.value })}
+                          onChange={(e) => { editMetadata.markEdited('icon'); setEditSite(current => ({ ...current, icon: e.target.value })) }}
                           placeholder="图标URL（可自动获取）"
                           disabled={isEditingSubmitting}
                         />
@@ -1899,7 +1810,7 @@ export function SiteListClient({
                     <Textarea
                       id="edit-description"
                       value={editSite.description}
-                      onChange={(e) => setEditSite({ ...editSite, description: e.target.value })}
+                      onChange={(e) => { editMetadata.markEdited('description'); setEditSite(current => ({ ...current, description: e.target.value })) }}
                       placeholder="输入站点描述（可选）"
                       className="resize-none"
                       disabled={isEditingSubmitting}
@@ -2505,4 +2416,12 @@ export function SiteListClient({
       </div>
     </TooltipProvider>
   )
+}
+
+function FormSaveError({ message }: { message: string }) {
+  if (!message) return null
+  return <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+    {message}
+    {message.includes('登录已过期') && <a className="ml-2 underline" href="/auth/signin?callbackUrl=%2Fadmin%2Fsitelist" target="_blank" rel="noopener noreferrer">重新登录</a>}
+  </div>
 }

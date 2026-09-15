@@ -4,6 +4,7 @@ import resourceMetadataData from '@/navsphere/content/resource-metadata.json'
 import siteData from '@/navsphere/content/site.json'
 import { uint8ArrayToBase64 } from '@/lib/buffer-utils'
 import { del, list, put } from '@vercel/blob'
+import type { LinkHealth } from '@/lib/site-quality'
 
 type RedisResponse<T> = {
   result?: T
@@ -179,6 +180,26 @@ function setCachedContent(path: string, value: unknown, ttlMs = DATA_CACHE_TTL_M
     cachedAt: now,
     expiresAt: now + ttlMs,
   })
+}
+
+export async function getStoredLinkHealth(): Promise<Record<string, LinkHealth>> {
+  const entries = await redisCommand<string[]>(['HGETALL', `${DATA_PREFIX}:link-health`], 2500)
+  const records: Record<string, LinkHealth> = {}
+  for (let index = 0; index < (entries?.length || 0); index += 2) {
+    try {
+      const record = JSON.parse(entries![index + 1]) as LinkHealth
+      if (typeof record.href === 'string' && typeof record.reason === 'string' &&
+        typeof record.checkedAt === 'string' && ['ok', 'broken', 'review'].includes(record.state)) {
+        records[entries![index]] = record
+      }
+    } catch { /* Ignore damaged individual records, allowing them to be checked again. */ }
+  }
+  return records
+}
+
+export async function saveLinkHealth(siteId: string, record: LinkHealth) {
+  // Independent hash fields keep simultaneous batches from overwriting each other's results.
+  await redisCommand(['HSET', `${DATA_PREFIX}:link-health`, siteId, JSON.stringify(record)])
 }
 
 // If Redis has not been initialized yet, the app can still boot from the

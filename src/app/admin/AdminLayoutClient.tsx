@@ -76,6 +76,10 @@ const menuItems = [
         title: '站点管理',
         href: '/admin/sitelist',
       },
+      {
+        title: '待处理清单',
+        href: '/admin/quality',
+      },
     ],
   },
   {

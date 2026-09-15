@@ -11,6 +11,8 @@ function getRequestUrl(input: RequestInfo | URL) {
 function shouldRedirectForUnauthorized(input: RequestInfo | URL, response: Response) {
   if (response.status !== 401 || typeof window === 'undefined') return false
   if (!window.location.pathname.startsWith('/admin')) return false
+  // Keep open forms intact. Their error message offers sign-in in a separate tab.
+  if (document.querySelector('[data-preserve-form="true"]')) return false
 
   try {
     const requestUrl = new URL(getRequestUrl(input), window.location.origin)
