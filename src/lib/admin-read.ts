@@ -44,6 +44,7 @@ type AdminSiteListInput = AdminReadOptions & {
   page?: number
   pageSize?: number
   all?: boolean
+  idsOnly?: boolean
 }
 
 export async function getAdminNavigationData(options: AdminReadOptions = {}) {
@@ -104,7 +105,7 @@ export async function getAdminNavigationSites(input: AdminSiteListInput = {}) {
 
   const filterItems = (items: NavigationCategory['items'] = []) => {
     const filteredItems = items.filter(item => {
-      const matchesQuery = !query || [item.title, item.href, item.description]
+      const matchesQuery = !query || [item.title, item.href, item.description, ...(item.aliases || [])]
         .some(value => value?.toLocaleLowerCase().includes(query))
       const matchesStatus = status === 'all'
         || (status === 'enabled' && item.enabled !== false)
@@ -149,6 +150,12 @@ export async function getAdminNavigationSites(input: AdminSiteListInput = {}) {
   const page = input.all ? 1 : clampInteger(input.page, 1, 1, totalPages)
   const startIndex = input.all ? 0 : (page - 1) * pageSize
   const endIndex = input.all ? siteCount : startIndex + pageSize
+  const siteIds = input.idsOnly
+    ? filteredNavigationItems.flatMap(category => [
+      ...(category.items || []).map(item => item.id),
+      ...category.subCategories.flatMap(subCategory => (subCategory.items || []).map(item => item.id)),
+    ])
+    : undefined
   let itemIndex = 0
 
   const takePageItems = (items: NavigationCategory['items'] = []) => items.filter(() => {
@@ -167,7 +174,7 @@ export async function getAdminNavigationSites(input: AdminSiteListInput = {}) {
   }))
 
   return {
-    navigationItems,
+    navigationItems: input.idsOnly ? [] : navigationItems,
     totalSiteCount,
     siteCount,
     categoryId,
@@ -177,6 +184,7 @@ export async function getAdminNavigationSites(input: AdminSiteListInput = {}) {
     page,
     pageSize,
     totalPages,
+    ...(siteIds ? { siteIds } : {}),
   }
 }
 

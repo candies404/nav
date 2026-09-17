@@ -28,6 +28,7 @@ export function processNavigationSubItem(item: NavigationSubItemRaw): Navigation
         href: item.href,
         description: item.description,
         icon: item.icon,
+        aliases: item.aliases,
         enabled: item.enabled,
         isPrivate: item.isPrivate ?? false
     }

@@ -4,6 +4,7 @@ export interface NavigationSubItemRaw {
   href: string
   description?: string
   icon?: string
+  aliases?: string[]
   enabled: boolean
   isPrivate?: boolean
 }
@@ -15,6 +16,7 @@ export interface NavigationSubItem {
   href: string
   description?: string
   icon?: string
+  aliases?: string[]
   enabled: boolean
   isPrivate?: boolean
 }
@@ -73,6 +75,7 @@ export interface NavigationSearchIndexItem {
   href: string
   description?: string
   icon?: string
+  aliases?: string[]
   categoryPath: string[]
 }
 

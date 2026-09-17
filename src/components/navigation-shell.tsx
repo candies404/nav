@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { Github, Menu } from 'lucide-react'
-import type { NavigationData, NavigationSearchIndex, NavigationSearchIndexItem } from '@/types/navigation'
+import type { NavigationData, NavigationSearchIndex } from '@/types/navigation'
 import type { SiteConfig } from '@/types/site'
 import { Sidebar } from '@/components/sidebar'
 import { SearchBar } from '@/components/search-bar'
@@ -11,6 +11,7 @@ import { ModeToggle } from '@/components/mode-toggle'
 import { Button } from '@/registry/new-york/ui/button'
 import { Sheet, SheetContent, SheetTitle, SheetDescription, SheetTrigger } from '@/registry/new-york/ui/sheet'
 import { useNavigationSidebar } from '@/components/use-navigation-sidebar'
+import { searchNavigationItems } from '@/lib/navigation-search'
 
 interface NavigationShellProps {
   navigationOutline: NavigationData
@@ -68,14 +69,8 @@ export function NavigationShell({
   }, [searchData, searchRevision])
 
   const searchResults = useMemo(() => {
-    const query = searchQuery.toLowerCase().trim()
-    if (!query || !searchData) return []
-
-    return searchData.items.filter((item: NavigationSearchIndexItem) =>
-      item.title.toLowerCase().includes(query) ||
-      item.description?.toLowerCase().includes(query) ||
-      item.categoryPath.some(path => path.toLowerCase().includes(query))
-    )
+    if (!searchData) return []
+    return searchNavigationItems(searchData.items, searchQuery)
   }, [searchData, searchQuery])
 
   return (

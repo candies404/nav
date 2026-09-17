@@ -27,6 +27,7 @@ export async function GET(request: Request) {
       page: readPositiveInteger(searchParams.get('page')),
       pageSize: readPositiveInteger(searchParams.get('pageSize')),
       all: searchParams.get('all') === '1',
+      idsOnly: searchParams.get('idsOnly') === '1',
       fresh: searchParams.get('fresh') === '1',
     })
 

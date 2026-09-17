@@ -78,6 +78,7 @@ function toSearchIndexItem(
     href: item.href,
     description: item.description,
     icon: item.icon,
+    aliases: item.aliases,
     categoryPath,
   }
 }

@@ -4,6 +4,17 @@ import Image from 'next/image'
 import { useSiteMetadata } from '@/components/admin/use-site-metadata'
 import { readAdminResponse, errorMessage } from '@/lib/admin-api-response'
 import { isHttpUrl } from '@/lib/site-form-state'
+import { deselectSiteIds, selectSiteIds } from '@/lib/site-selection'
+import {
+  SITE_FORM_DRAFT_STORAGE_KEY,
+  createEmptySiteForm,
+  formatSiteAliases,
+  hasSiteFormChanges,
+  parseSiteAliases,
+  parseSiteFormDraft,
+  type SiteFormDraft,
+  type SiteFormValues,
+} from '@/lib/site-draft'
 import { DuplicateSiteNotice } from '@/components/admin/duplicate-site-notice'
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from "@/registry/new-york/ui/button"
@@ -79,6 +90,7 @@ interface Site {
   url: string
   description?: string
   icon?: string
+  aliases?: string[]
   enabled?: boolean
   isPrivate?: boolean
   createdAt: string
@@ -86,6 +98,9 @@ interface Site {
 }
 
 type BatchOperation = 'enable' | 'disable' | 'private' | 'public' | 'move' | null
+type DraftPrompt =
+  | { type: 'discard'; form: 'add' | 'edit' }
+  | { type: 'leave'; href: string }
 
 type SiteListResponse = {
   navigationItems: Category[]
@@ -94,6 +109,7 @@ type SiteListResponse = {
   page?: number
   pageSize?: number
   totalPages?: number
+  siteIds?: string[]
 }
 
 const readMutationResponse = readAdminResponse
@@ -109,6 +125,7 @@ function extractSites(navigationItems: Category[]): Site[] {
         url: item.href,
         description: item.description,
         icon: item.icon,
+        aliases: item.aliases,
         enabled: item.enabled ?? true,
         isPrivate: item.isPrivate ?? false,
         createdAt: '',
@@ -124,6 +141,7 @@ function extractSites(navigationItems: Category[]): Site[] {
           url: item.href,
           description: item.description,
           icon: item.icon,
+          aliases: item.aliases,
           enabled: item.enabled ?? true,
           isPrivate: item.isPrivate ?? false,
           createdAt: '',
@@ -159,6 +177,22 @@ function SiteIcon({ site }: { site: Pick<Site, 'name' | 'icon'> }) {
   )
 }
 
+function saveSiteFormDraft(draft: SiteFormDraft) {
+  try {
+    window.localStorage.setItem(SITE_FORM_DRAFT_STORAGE_KEY, JSON.stringify(draft))
+  } catch {
+    // Storage can be unavailable; the current in-memory form still remains intact.
+  }
+}
+
+function clearSiteFormDraft() {
+  try {
+    window.localStorage.removeItem(SITE_FORM_DRAFT_STORAGE_KEY)
+  } catch {
+    // Ignore storage cleanup failures.
+  }
+}
+
 export function SiteListClient({
   initialData,
   initialCategoryId,
@@ -179,14 +213,19 @@ export function SiteListClient({
   const [searchQuery, setSearchQuery] = useState(initialQuery)
   const [isLoading, setIsLoading] = useState(false)
   const [selectedSites, setSelectedSites] = useState<string[]>([])
+  const [isSelectingAllResults, setIsSelectingAllResults] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [isInitialLoading, setIsInitialLoading] = useState(false)
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
+  const [draftPrompt, setDraftPrompt] = useState<DraftPrompt | null>(null)
   const [editingSite, setEditingSite] = useState<Site | null>(null)
   const editingSiteIdRef = useRef(editingSite?.id)
   editingSiteIdRef.current = editingSite?.id
   const openedEditId = useRef('')
+  const editBaselineRef = useRef<SiteFormValues>(createEmptySiteForm())
+  const restoredDraftRef = useRef(false)
+  const allowPageLeaveRef = useRef(false)
   const [navigationData, setNavigationData] = useState<Category[]>(initialData.navigationItems || [])
   const [totalSiteCount, setTotalSiteCount] = useState(initialData.totalSiteCount ?? initialData.siteCount ?? 0)
   const [resultSiteCount, setResultSiteCount] = useState(initialData.siteCount ?? 0)
@@ -220,33 +259,125 @@ export function SiteListClient({
   const isInitialLoadingRef = useRef(false)
   const skipInitialFilterFetchRef = useRef(true)
   const siteRequestSequenceRef = useRef(0)
-  const [newSite, setNewSite] = useState({
-    name: '',
-    url: '',
-    description: '',
-    icon: '',
-    categoryId: '',
-    subCategoryId: '',
-    enabled: true,
-    isPrivate: false
-  })
-  const [editSite, setEditSite] = useState({
-    name: '',
-    url: '',
-    description: '',
-    icon: '',
-    categoryId: '',
-    subCategoryId: '',
-    enabled: true,
-    isPrivate: false
-  })
+  const [newSite, setNewSite] = useState<SiteFormValues>(createEmptySiteForm)
+  const [editSite, setEditSite] = useState<SiteFormValues>(createEmptySiteForm)
 
   const addMetadata = useSiteMetadata(newSite, setNewSite, showAddDialog && !isAddingSubmitting)
   const editMetadata = useSiteMetadata(editSite, setEditSite, showEditDialog && !isEditingSubmitting, editingSite?.url)
+  const resetEditMetadata = editMetadata.reset
   const isFetchingAddMetadata = addMetadata.loading
   const isFetchingEditMetadata = editMetadata.loading
   const [addError, setAddError] = useState('')
   const [editError, setEditError] = useState('')
+  const addHasChanges = useMemo(
+    () => hasSiteFormChanges(newSite, createEmptySiteForm()),
+    [newSite]
+  )
+  const editHasChanges = useMemo(
+    () => Boolean(editingSite) && hasSiteFormChanges(editSite, editBaselineRef.current),
+    [editSite, editingSite]
+  )
+  const hasOpenUnsavedChanges = (showAddDialog && addHasChanges) || (showEditDialog && editHasChanges)
+
+  useEffect(() => {
+    if (restoredDraftRef.current) return
+    restoredDraftRef.current = true
+
+    let draft: SiteFormDraft | null = null
+    try {
+      draft = parseSiteFormDraft(window.localStorage.getItem(SITE_FORM_DRAFT_STORAGE_KEY))
+    } catch {
+      return
+    }
+    if (!draft) {
+      clearSiteFormDraft()
+      return
+    }
+
+    if (draft.kind === 'add') {
+      addMetadata.reset()
+      addMetadata.markEdited('name')
+      addMetadata.markEdited('description')
+      addMetadata.markEdited('icon')
+      setNewSite(draft.values)
+      setShowAddDialog(true)
+    } else {
+      editMetadata.reset()
+      editMetadata.markEdited('name')
+      editMetadata.markEdited('description')
+      editMetadata.markEdited('icon')
+      editBaselineRef.current = draft.baseline
+      openedEditId.current = draft.siteId!
+      setEditingSite({
+        id: draft.siteId!,
+        name: draft.baseline.name,
+        url: draft.baseline.url,
+        aliases: parseSiteAliases(draft.baseline.aliases),
+        description: draft.baseline.description,
+        icon: draft.baseline.icon,
+        enabled: draft.baseline.enabled,
+        isPrivate: draft.baseline.isPrivate,
+        createdAt: '',
+        updatedAt: '',
+      })
+      setEditSite(draft.values)
+      setShowEditDialog(true)
+    }
+
+    toast({
+      title: '已恢复草稿',
+      description: `已恢复${draft.kind === 'add' ? '新增' : '编辑'}站点时未保存的内容`,
+    })
+  }, [addMetadata, editMetadata, toast])
+
+  useEffect(() => {
+    if (!showAddDialog || !addHasChanges) return
+    saveSiteFormDraft({
+      version: 1,
+      kind: 'add',
+      values: newSite,
+      baseline: createEmptySiteForm(),
+      savedAt: Date.now(),
+    })
+  }, [addHasChanges, newSite, showAddDialog])
+
+  useEffect(() => {
+    if (!showEditDialog || !editingSite || !editHasChanges) return
+    saveSiteFormDraft({
+      version: 1,
+      kind: 'edit',
+      siteId: editingSite.id,
+      values: editSite,
+      baseline: editBaselineRef.current,
+      savedAt: Date.now(),
+    })
+  }, [editHasChanges, editSite, editingSite, showEditDialog])
+
+  useEffect(() => {
+    if (!hasOpenUnsavedChanges) return
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (allowPageLeaveRef.current) return
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    const handleLinkClick = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
+      const target = event.target instanceof Element ? event.target : null
+      const anchor = target?.closest<HTMLAnchorElement>('a[href]')
+      if (!anchor || anchor.target === '_blank' || anchor.hasAttribute('download')) return
+      const nextUrl = new URL(anchor.href, window.location.href)
+      if (nextUrl.href === window.location.href) return
+      event.preventDefault()
+      event.stopPropagation()
+      setDraftPrompt({ type: 'leave', href: nextUrl.href })
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    document.addEventListener('click', handleLinkClick, true)
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      document.removeEventListener('click', handleLinkClick, true)
+    }
+  }, [hasOpenUnsavedChanges])
 
   const loadSiteList = useCallback(async (
     categoryId: string,
@@ -258,6 +389,7 @@ export function SiteListClient({
       query?: string
       status?: 'all' | 'enabled' | 'disabled'
       all?: boolean
+      idsOnly?: boolean
     } = {}
   ): Promise<SiteListResponse> => {
     const searchParams = new URLSearchParams()
@@ -268,6 +400,7 @@ export function SiteListClient({
     if (options.page) searchParams.set('page', String(options.page))
     if (options.pageSize) searchParams.set('pageSize', String(options.pageSize))
     if (options.all) searchParams.set('all', '1')
+    if (options.idsOnly) searchParams.set('idsOnly', '1')
     if (options.fresh) searchParams.set('fresh', '1')
     const queryString = searchParams.toString()
     const response = await fetch(`/api/navigation/sites${queryString ? `?${queryString}` : ''}`)
@@ -527,6 +660,12 @@ export function SiteListClient({
   }
 
   const filteredSites = sites
+  const currentPageSiteIds = useMemo(() => filteredSites.map(site => site.id), [filteredSites])
+  const selectedSiteIds = useMemo(() => new Set(selectedSites), [selectedSites])
+  const selectedOnCurrentPage = currentPageSiteIds.filter(id => selectedSiteIds.has(id)).length
+  const isCurrentPageFullySelected = currentPageSiteIds.length > 0 && selectedOnCurrentPage === currentPageSiteIds.length
+  const isCurrentPagePartiallySelected = selectedOnCurrentPage > 0 && !isCurrentPageFullySelected
+  const isAllResultsSelected = resultSiteCount > 0 && selectedSites.length === resultSiteCount
 
   // 键盘快捷键支持
   useEffect(() => {
@@ -562,7 +701,7 @@ export function SiteListClient({
         // 只有在主列表区域且有站点时才全选站点
         if (filteredSites.length > 0) {
           event.preventDefault()
-          setSelectedSites(filteredSites.map(site => site.id))
+          setSelectedSites(current => selectSiteIds(current, currentPageSiteIds))
         }
       }
     }
@@ -571,21 +710,43 @@ export function SiteListClient({
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [selectedSites, showDeleteDialog, filteredSites, showAddDialog, showEditDialog])
+  }, [selectedSites, showDeleteDialog, filteredSites, currentPageSiteIds, showAddDialog, showEditDialog])
 
   const handleSelectAll = (checked: boolean | string) => {
     if (checked === true) {
-      setSelectedSites(filteredSites.map(site => site.id))
+      setSelectedSites(current => selectSiteIds(current, currentPageSiteIds))
     } else {
-      setSelectedSites([])
+      setSelectedSites(current => deselectSiteIds(current, currentPageSiteIds))
     }
   }
 
   const handleSelectOne = (checked: boolean | string, siteId: string) => {
     if (checked === true) {
-      setSelectedSites([...selectedSites, siteId])
+      setSelectedSites(current => current.includes(siteId) ? current : [...current, siteId])
     } else {
-      setSelectedSites(selectedSites.filter(id => id !== siteId))
+      setSelectedSites(current => current.filter(id => id !== siteId))
+    }
+  }
+
+  const handleSelectAllResults = async () => {
+    if (isSelectingAllResults || isLoading || resultSiteCount === 0) return
+    setIsSelectingAllResults(true)
+    try {
+      const data = await loadSiteList(categoryFilter, subCategoryFilter, {
+        all: true,
+        idsOnly: true,
+        query: deferredSearchQuery,
+        status: statusFilter,
+      })
+      setSelectedSites(data.siteIds || [])
+    } catch (error) {
+      toast({
+        title: '错误',
+        description: errorMessage(error, '选择全部筛选结果失败'),
+        variant: 'destructive',
+      })
+    } finally {
+      setIsSelectingAllResults(false)
     }
   }
 
@@ -651,6 +812,7 @@ export function SiteListClient({
         body: JSON.stringify({
           title: newSite.name,
           href: newSite.url,
+          aliases: parseSiteAliases(newSite.aliases),
           description: newSite.description,
           icon: newSite.icon,
           enabled: newSite.enabled,
@@ -672,17 +834,9 @@ export function SiteListClient({
       })
 
       // Reset only after a successful save.
+      clearSiteFormDraft()
       addMetadata.reset()
-      setNewSite({
-        name: '',
-        url: '',
-        description: '',
-        icon: '',
-        categoryId: '',
-        subCategoryId: '',
-        enabled: true,
-        isPrivate: false
-      })
+      setNewSite(createEmptySiteForm())
       setShowAddDialog(false)
 
     } catch (error) {
@@ -727,6 +881,7 @@ export function SiteListClient({
         body: JSON.stringify({
           title: editSite.name,
           href: editSite.url,
+          aliases: parseSiteAliases(editSite.aliases),
           description: editSite.description,
           icon: editSite.icon,
           enabled: editSite.enabled,
@@ -746,16 +901,8 @@ export function SiteListClient({
       })
 
       // Reset form and close dialog
-      setEditSite({
-        name: '',
-        url: '',
-        description: '',
-        icon: '',
-        categoryId: '',
-        subCategoryId: '',
-        enabled: true,
-        isPrivate: false
-      })
+      clearSiteFormDraft()
+      setEditSite(createEmptySiteForm())
       setEditingSite(null)
       setShowEditDialog(false)
 
@@ -772,7 +919,7 @@ export function SiteListClient({
     }
   }
 
-  const openEditDialog = (site: Site) => {
+  const openEditDialog = useCallback((site: Site) => {
     setEditingSite(site)
 
     // Find the category and subcategory for this site, and get the icon
@@ -809,19 +956,72 @@ export function SiteListClient({
       }
     }
 
-    editMetadata.reset()
-    setEditError('')
-    setEditSite({
+    const formValues: SiteFormValues = {
       name: site.name,
       url: site.url,
+      aliases: formatSiteAliases(site.aliases),
       description: site.description || '',
       icon: icon,
       categoryId,
       subCategoryId,
       enabled,
-      isPrivate
-    })
+      isPrivate,
+    }
+
+    resetEditMetadata()
+    setEditError('')
+    editBaselineRef.current = formValues
+    setEditSite(formValues)
     setShowEditDialog(true)
+  }, [navigationData, resetEditMetadata])
+
+  const discardAddDraft = () => {
+    if (isAddingSubmitting) return
+    clearSiteFormDraft()
+    addMetadata.reset()
+    setAddError('')
+    setNewSite(createEmptySiteForm())
+    setShowAddDialog(false)
+  }
+
+  const discardEditDraft = () => {
+    if (isEditingSubmitting) return
+    clearSiteFormDraft()
+    editMetadata.reset()
+    setEditError('')
+    setEditSite(createEmptySiteForm())
+    setEditingSite(null)
+    setShowEditDialog(false)
+  }
+
+  const closeAddDialog = () => {
+    if (isAddingSubmitting) return
+    if (addHasChanges) {
+      setDraftPrompt({ type: 'discard', form: 'add' })
+      return
+    }
+    discardAddDraft()
+  }
+
+  const closeEditDialog = () => {
+    if (isEditingSubmitting) return
+    if (editHasChanges) {
+      setDraftPrompt({ type: 'discard', form: 'edit' })
+      return
+    }
+    discardEditDraft()
+  }
+
+  const confirmDraftPrompt = () => {
+    if (!draftPrompt) return
+    if (draftPrompt.type === 'leave') {
+      allowPageLeaveRef.current = true
+      window.location.assign(draftPrompt.href)
+      return
+    }
+    if (draftPrompt.form === 'add') discardAddDraft()
+    else discardEditDraft()
+    setDraftPrompt(null)
   }
 
   useEffect(() => {
@@ -831,7 +1031,7 @@ export function SiteListClient({
       openedEditId.current = initialEditId
       openEditDialog(site)
     }
-  }, [initialEditId, sites])
+  }, [initialEditId, openEditDialog, sites])
 
   const handleDeleteSite = async () => {
     if (!deletingSite) return
@@ -853,6 +1053,7 @@ export function SiteListClient({
       })
 
       // Close dialog
+      setSelectedSites(current => current.filter(id => id !== deletingSite.id))
       setShowDeleteSiteDialog(false)
       setDeletingSite(null)
     } catch (error) {
@@ -1068,7 +1269,7 @@ export function SiteListClient({
   const sortSubCategories = selectedSortCategory?.subCategories || []
   const selectedBatchMoveCategory = navigationData.find((category) => category.id === batchMoveCategoryId)
   const batchMoveSubCategories = selectedBatchMoveCategory?.subCategories || []
-  const isBatchWorking = Boolean(batchOperation) || isBatchDeleting
+  const isBatchWorking = Boolean(batchOperation) || isBatchDeleting || isSelectingAllResults
   const hasSortChanges =
     sortItems.length !== sortOriginalItemIds.length ||
     sortItems.some((item, index) => item.id !== sortOriginalItemIds[index])
@@ -1201,7 +1402,8 @@ export function SiteListClient({
             </Button>
 
             <Dialog open={showAddDialog} onOpenChange={(open) => {
-              if (!isAddingSubmitting) setShowAddDialog(open)
+              if (open) setShowAddDialog(true)
+              else closeAddDialog()
             }}>
               <DialogTrigger asChild>
                 <Button className="w-full sm:w-auto">
@@ -1261,6 +1463,17 @@ export function SiteListClient({
                       placeholder="站点名称（可自动获取）"
                       disabled={isAddingSubmitting}
                     />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="aliases">搜索别名</Label>
+                    <Input
+                      id="aliases"
+                      value={newSite.aliases}
+                      onChange={(event) => setNewSite(current => ({ ...current, aliases: event.target.value }))}
+                      placeholder="多个别名用逗号分隔"
+                      disabled={isAddingSubmitting}
+                    />
+                    <p className="text-xs text-muted-foreground">用于首页搜索，不会显示在导航卡片上</p>
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="icon">站点图标</Label>
@@ -1419,7 +1632,7 @@ export function SiteListClient({
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setShowAddDialog(false)}
+                    onClick={closeAddDialog}
                     disabled={isAddingSubmitting}
                   >
                     取消
@@ -1631,9 +1844,8 @@ export function SiteListClient({
 
             {/* 编辑站点对话框 */}
             <Dialog open={showEditDialog} onOpenChange={(open) => {
-              if (!open && !isEditingSubmitting) {
-                setShowEditDialog(false)
-              }
+              if (open) setShowEditDialog(true)
+              else closeEditDialog()
             }}>
               <DialogContent className="sm:max-w-[425px]" data-preserve-form="true">
                 <DialogHeader>
@@ -1687,6 +1899,17 @@ export function SiteListClient({
                       placeholder="站点名称（可自动获取）"
                       disabled={isEditingSubmitting}
                     />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-aliases">搜索别名</Label>
+                    <Input
+                      id="edit-aliases"
+                      value={editSite.aliases}
+                      onChange={(event) => setEditSite(current => ({ ...current, aliases: event.target.value }))}
+                      placeholder="多个别名用逗号分隔"
+                      disabled={isEditingSubmitting}
+                    />
+                    <p className="text-xs text-muted-foreground">用于首页搜索，不会显示在导航卡片上</p>
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="edit-icon">站点图标</Label>
@@ -1845,7 +2068,7 @@ export function SiteListClient({
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setShowEditDialog(false)}
+                    onClick={closeEditDialog}
                     disabled={isEditingSubmitting}
                   >
                     取消
@@ -1872,6 +2095,22 @@ export function SiteListClient({
               <span className="min-w-0 text-sm font-medium text-blue-900 dark:text-blue-100">
                 已选择 {selectedSites.length} 个站点
               </span>
+              {isCurrentPageFullySelected && !isAllResultsSelected && resultSiteCount > currentPageSiteIds.length && (
+                <Button
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  className="h-auto px-1 text-blue-700 dark:text-blue-200"
+                  onClick={() => void handleSelectAllResults()}
+                  disabled={isSelectingAllResults || isLoading}
+                >
+                  {isSelectingAllResults && <Icons.loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                  选择全部 {resultSiteCount} 个匹配站点
+                </Button>
+              )}
+              {isAllResultsSelected && (
+                <span className="text-xs text-blue-700 dark:text-blue-200">已选择全部筛选结果</span>
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Button
@@ -1988,8 +2227,11 @@ export function SiteListClient({
                     <TableHead className="w-12">
                       <Checkbox
                         checked={
-                          filteredSites.length > 0 &&
-                          selectedSites.length === filteredSites.length
+                          isCurrentPageFullySelected
+                            ? true
+                            : isCurrentPagePartiallySelected
+                              ? 'indeterminate'
+                              : false
                         }
                         onCheckedChange={handleSelectAll}
                         aria-label="Select all"
@@ -2093,8 +2335,11 @@ export function SiteListClient({
                   <TableHead className="w-12">
                     <Checkbox
                       checked={
-                        filteredSites.length > 0 &&
-                        selectedSites.length === filteredSites.length
+                        isCurrentPageFullySelected
+                          ? true
+                          : isCurrentPagePartiallySelected
+                            ? 'indeterminate'
+                            : false
                       }
                       onCheckedChange={handleSelectAll}
                       aria-label="Select all"
@@ -2240,7 +2485,6 @@ export function SiteListClient({
                 onValueChange={(value) => {
                   setPageSize(Number(value))
                   setCurrentPage(1)
-                  setSelectedSites([])
                 }}
               >
                 <SelectTrigger className="h-8 w-[108px]">
@@ -2259,7 +2503,6 @@ export function SiteListClient({
                 disabled={currentPage <= 1 || isLoading}
                 onClick={() => {
                   setCurrentPage(page => Math.max(1, page - 1))
-                  setSelectedSites([])
                 }}
               >
                 上一页
@@ -2274,7 +2517,6 @@ export function SiteListClient({
                 disabled={currentPage >= totalPages || isLoading}
                 onClick={() => {
                   setCurrentPage(page => Math.min(totalPages, page + 1))
-                  setSelectedSites([])
                 }}
               >
                 下一页
@@ -2360,6 +2602,50 @@ export function SiteListClient({
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <AlertDialog
+          open={Boolean(draftPrompt)}
+          onOpenChange={(open) => { if (!open) setDraftPrompt(null) }}
+        >
+          <AlertDialogContent className="w-[calc(100vw-2rem)] max-w-md gap-0 overflow-hidden border-0 p-0 shadow-2xl">
+            <div className="border-b bg-gradient-to-br from-amber-50 via-background to-background px-6 pb-5 pt-6 dark:from-amber-950/30">
+              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-100 text-amber-700 shadow-sm ring-1 ring-amber-200/70 dark:bg-amber-900/50 dark:text-amber-300 dark:ring-amber-800">
+                <Icons.save className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <AlertDialogHeader className="space-y-2 text-left">
+                <AlertDialogTitle className="text-xl tracking-tight">
+                  {draftPrompt?.type === 'leave' ? '要离开站点管理吗？' : '放弃未保存的更改？'}
+                </AlertDialogTitle>
+                <AlertDialogDescription className="leading-6">
+                  {draftPrompt?.type === 'leave'
+                    ? '当前表单尚未保存。离开后可以返回站点管理继续编辑。'
+                    : `关闭后将删除这份${draftPrompt?.type === 'discard' && draftPrompt.form === 'edit' ? '编辑' : '新增'}草稿，刚才填写的内容无法恢复。`}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-amber-200/80 bg-amber-100/60 px-3.5 py-3 text-sm text-amber-900 dark:border-amber-800/70 dark:bg-amber-950/40 dark:text-amber-200">
+                <Icons.check className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                <span>
+                  {draftPrompt?.type === 'leave'
+                    ? '草稿已自动保存在当前浏览器，有效期为 7 天。'
+                    : '如果还需要这些内容，请选择继续编辑。'}
+                </span>
+              </div>
+            </div>
+            <AlertDialogFooter className="gap-2 bg-muted/20 px-6 py-4 sm:space-x-0">
+              <AlertDialogCancel className="mt-0">
+                {draftPrompt?.type === 'leave' ? '留在此页' : '继续编辑'}
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={confirmDraftPrompt}
+                className={draftPrompt?.type === 'discard'
+                  ? 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500'
+                  : ''}
+              >
+                {draftPrompt?.type === 'leave' ? '保留草稿并离开' : '放弃并关闭'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <AlertDialog open={showDeleteDialog} onOpenChange={(open) => {
           if (!open && !isBatchDeleting) {

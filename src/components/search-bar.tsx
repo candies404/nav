@@ -8,6 +8,7 @@ import { Button } from '@/registry/new-york/ui/button'
 import type { NavigationSearchIndexItem } from '@/types/navigation'
 import type { SiteConfig } from '@/types/site'
 import { getNavigationItemElementId } from '@/lib/navigation-anchor'
+import { getNavigationHostname } from '@/lib/navigation-search'
 
 interface SearchBarProps {
   onSearch: (query: string) => void
@@ -27,6 +28,7 @@ interface SearchResultItemProps {
 }
 
 function SearchResultItem({ item, searchQuery, onSelect, onOpen }: SearchResultItemProps) {
+  const hostname = getNavigationHostname(item.href)
   const highlightText = (text: string) => {
     const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const parts = text.split(new RegExp(`(${escapedQuery})`, 'gi'))
@@ -75,6 +77,16 @@ function SearchResultItem({ item, searchQuery, onSelect, onOpen }: SearchResultI
         {item.categoryPath.length > 0 && (
           <span className="line-clamp-1 text-[11px] text-muted-foreground/80">
             {highlightText(item.categoryPath.join(' / '))}
+          </span>
+        )}
+        {hostname && (
+          <span className="line-clamp-1 text-[11px] text-muted-foreground/80">
+            {highlightText(hostname)}
+          </span>
+        )}
+        {item.aliases && item.aliases.length > 0 && (
+          <span className="line-clamp-1 text-[11px] text-muted-foreground/80">
+            别名：{highlightText(item.aliases.join('、'))}
           </span>
         )}
         {item.description && (

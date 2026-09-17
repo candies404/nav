@@ -11,12 +11,12 @@ export type SiteTarget = {
 
 export type SitePatch = Partial<Pick<
   NavigationSubItem,
-  'title' | 'href' | 'description' | 'icon' | 'enabled' | 'isPrivate'
+  'title' | 'href' | 'description' | 'icon' | 'aliases' | 'enabled' | 'isPrivate'
 >>
 
 export type AddSiteInput = SiteTarget & Pick<
   NavigationSubItem,
-  'title' | 'href' | 'description' | 'icon' | 'enabled' | 'isPrivate'
+  'title' | 'href' | 'description' | 'icon' | 'aliases' | 'enabled' | 'isPrivate'
 >
 
 export type BatchSiteOperation =
@@ -51,6 +51,7 @@ export async function addNavigationSite(input: AddSiteInput) {
     href: input.href.trim(),
     description: input.description,
     icon: input.icon,
+    aliases: normalizeAliases(input.aliases),
     enabled: input.enabled,
     isPrivate: input.isPrivate,
   }
@@ -283,6 +284,11 @@ function validateSiteFields(update: SitePatch, requireAll: boolean) {
   if (update.icon !== undefined && typeof update.icon !== 'string') {
     throw new NavigationSiteMutationError('Invalid site icon')
   }
+  if (update.aliases !== undefined && (
+    !Array.isArray(update.aliases) || update.aliases.some(alias => typeof alias !== 'string')
+  )) {
+    throw new NavigationSiteMutationError('Invalid site aliases')
+  }
   if (update.enabled !== undefined && typeof update.enabled !== 'boolean') {
     throw new NavigationSiteMutationError('Invalid enabled state')
   }
@@ -312,9 +318,14 @@ function pickSitePatch(update: SitePatch) {
   if (update.href !== undefined) patch.href = update.href.trim()
   if (update.description !== undefined) patch.description = update.description
   if (update.icon !== undefined) patch.icon = update.icon
+  if (update.aliases !== undefined) patch.aliases = normalizeAliases(update.aliases)
   if (update.enabled !== undefined) patch.enabled = update.enabled
   if (update.isPrivate !== undefined) patch.isPrivate = update.isPrivate
   return patch
+}
+
+function normalizeAliases(aliases?: string[]) {
+  return [...new Set((aliases || []).map(alias => alias.trim()).filter(Boolean))]
 }
 
 function getBatchPatch(operation: Exclude<BatchSiteOperation, 'delete' | 'move'>) {

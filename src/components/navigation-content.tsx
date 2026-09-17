@@ -39,7 +39,7 @@ export function NavigationContent({
             <section
               key={category.id}
               id={category.id}
-              className="scroll-m-16 [content-visibility:auto] [contain-intrinsic-size:720px]"
+              className="scroll-m-16"
             >
               <div className="space-y-3 sm:space-y-4">
                 <h2 className="text-base font-medium tracking-tight">
