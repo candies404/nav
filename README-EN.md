@@ -132,8 +132,11 @@ pnpm dev
 Create a `.env.local` file and configure the following variables:
 
 ```env
-# Admin password
+# Admin password (required in production, 12–256 characters; replace this placeholder before deployment)
 ADMIN_PASSWORD=change-this-admin-password
+# Failed-login rate limit (optional; defaults to 5 attempts per 15 minutes)
+# ADMIN_LOGIN_MAX_ATTEMPTS=5
+# ADMIN_LOGIN_WINDOW_SECONDS=900
 
 # Upstash Redis/KV REST configuration
 KV_REST_API_URL=https://your-redis-instance.upstash.io
@@ -157,8 +160,9 @@ GA_ID=your-google-analytics-id
 
 1. Create a Redis database in Upstash.
 2. Copy the database `REST URL` and `REST TOKEN` to `.env.local`.
-3. Set a strong `ADMIN_PASSWORD`.
-4. If Redis has no data on first read, the app uses the bundled JSON as defaults. After saving in the admin dashboard, data is written to Redis.
+3. Set a non-default `ADMIN_PASSWORD` of 12–256 characters that is not a common weak password. Production admin login is blocked when this configuration is invalid.
+4. Redis also backs failed-login throttling. In production, authentication fails closed when Redis is missing or unavailable so brute-force protection cannot silently disappear.
+5. If Redis has no data on first read, the app uses the bundled JSON as defaults. After saving in the admin dashboard, data is written to Redis.
 
 ## 📊 Data Structure
 
@@ -396,8 +400,9 @@ NavSphere/
 ### Common Issues
 
 **Authentication Failure**
-- Check that `ADMIN_PASSWORD` is configured and entered correctly
+- Check that `ADMIN_PASSWORD` is a non-default strong password of 12–256 characters; production blocks missing, placeholder, and common weak values
 - Check that `AUTH_SECRET` is configured
+- Check the Redis REST configuration; after the default 5 failed attempts, wait 15 minutes before retrying
 - In production, do not set `NEXTAUTH_URL` or `AUTH_URL` to `http://localhost:3000`; usually leave them unset, or use `AUTH_URL=https://your-domain.com` to pin a public domain
 
 **Data Loading Failure**

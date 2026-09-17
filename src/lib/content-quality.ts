@@ -17,5 +17,16 @@ export async function getContentQualityReport(): Promise<QualityReport> {
       return {} as Record<string, LinkHealth>
     }),
   ])
-  return { items: buildQualityItems(navigation, health), healthWarning }
+  return {
+    items: buildQualityItems(navigation, health),
+    categories: navigation.navigationItems.map(category => ({
+      id: category.id,
+      title: category.title,
+      subCategories: category.subCategories?.map(subCategory => ({
+        id: subCategory.id,
+        title: subCategory.title,
+      })),
+    })),
+    healthWarning,
+  }
 }

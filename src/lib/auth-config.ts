@@ -3,12 +3,23 @@ export const ADMIN_USER_ID = 'admin'
 export const SESSION_MAX_AGE_SECONDS = 15 * 60
 
 const MIN_AUTH_SECRET_LENGTH = 32
+const MIN_ADMIN_PASSWORD_LENGTH = 12
+const MAX_ADMIN_PASSWORD_LENGTH = 256
 const PLACEHOLDER_AUTH_SECRETS = new Set([
   'your-random-auth-secret',
   'your-secret-key',
   'generate-a-32-byte-random-secret-before-deploy',
   'changeme',
   'change-me',
+])
+const INSECURE_ADMIN_PASSWORDS = new Set([
+  DEFAULT_ADMIN_PASSWORD,
+  'password',
+  'admin',
+  'admin123',
+  'changeme',
+  'change-me',
+  'change-this-admin-password',
 ])
 
 const LOCAL_AUTH_HOSTS = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'])
@@ -41,7 +52,48 @@ export function sanitizeAuthUrlEnv() {
 // Run before Auth.js initializes so copied local URLs do not leak into production callbacks.
 sanitizeAuthUrlEnv()
 
+export type AdminPasswordStatus = {
+  configured: boolean
+  secure: boolean
+  blocked: boolean
+  message?: string
+}
+
+export function getAdminPasswordStatus(): AdminPasswordStatus {
+  const configuredPassword = process.env.ADMIN_PASSWORD
+  const configured = Boolean(configuredPassword)
+  const candidate = configuredPassword || DEFAULT_ADMIN_PASSWORD
+  const weak = (
+    candidate.trim().length < MIN_ADMIN_PASSWORD_LENGTH
+    || candidate.length > MAX_ADMIN_PASSWORD_LENGTH
+    || INSECURE_ADMIN_PASSWORDS.has(candidate.trim().toLocaleLowerCase())
+  )
+  const production = process.env.NODE_ENV === 'production'
+
+  if (production && (!configured || weak)) {
+    return {
+      configured,
+      secure: false,
+      blocked: true,
+      message: `管理员登录尚未安全配置。请设置 ${MIN_ADMIN_PASSWORD_LENGTH}–${MAX_ADMIN_PASSWORD_LENGTH} 位且非默认值的 ADMIN_PASSWORD 后重新部署。`,
+    }
+  }
+
+  if (!configured || weak) {
+    return {
+      configured,
+      secure: false,
+      blocked: false,
+      message: `当前使用仅供本地开发的弱管理密码；部署前必须设置 ${MIN_ADMIN_PASSWORD_LENGTH}–${MAX_ADMIN_PASSWORD_LENGTH} 位的非默认 ADMIN_PASSWORD。`,
+    }
+  }
+
+  return { configured: true, secure: true, blocked: false }
+}
+
 export function getAdminPassword() {
+  const status = getAdminPasswordStatus()
+  if (status.blocked) throw new Error(status.message)
   return process.env.ADMIN_PASSWORD || DEFAULT_ADMIN_PASSWORD
 }
 

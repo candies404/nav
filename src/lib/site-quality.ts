@@ -14,7 +14,16 @@ export type LinkHealth = {
 }
 export type QualityIssue = 'broken-link' | 'review-link' | 'missing-icon' | 'missing-description' | 'duplicate' | 'unchecked'
 export type QualityItem = QualitySite & { issues: QualityIssue[]; health?: LinkHealth }
-export type QualityReport = { items: QualityItem[]; healthWarning?: string }
+export type QualityCategory = {
+  id: string
+  title: string
+  subCategories?: Array<{ id: string; title: string }>
+}
+export type QualityReport = {
+  items: QualityItem[]
+  categories: QualityCategory[]
+  healthWarning?: string
+}
 
 export const qualityLabels: Record<QualityIssue, string> = {
   'broken-link': '失效链接', 'review-link': '链接待复核',

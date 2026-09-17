@@ -1,19 +1,35 @@
 import { ADMIN_USER_ID, SESSION_MAX_AGE_SECONDS, getAdminPassword, getAuthSecret } from '@/lib/auth-config'
+import { clearAdminLoginAttempts, reserveAdminLoginAttempt } from '@/lib/admin-login-rate-limit'
 import NextAuth from 'next-auth'
+import { CredentialsSignin } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import type { NextAuthConfig } from 'next-auth'
 
-// Keep the comparison work predictable for equal-length inputs; the password
-// comes from ADMIN_PASSWORD, falling back to the local setup default.
-function comparePassword(input: string, expected: string) {
-  if (input.length !== expected.length) return false
-
-  let diff = 0
-  for (let index = 0; index < input.length; index += 1) {
-    diff |= input.charCodeAt(index) ^ expected.charCodeAt(index)
+async function comparePassword(input: string, expected: string) {
+  const encoder = new TextEncoder()
+  const [inputDigest, expectedDigest] = await Promise.all([
+    crypto.subtle.digest('SHA-256', encoder.encode(input)),
+    crypto.subtle.digest('SHA-256', encoder.encode(expected)),
+  ])
+  const inputBytes = new Uint8Array(inputDigest)
+  const expectedBytes = new Uint8Array(expectedDigest)
+  let difference = 0
+  for (let index = 0; index < inputBytes.length; index += 1) {
+    difference |= inputBytes[index] ^ expectedBytes[index]
   }
+  return difference === 0
+}
 
-  return diff === 0
+class AdminRateLimitError extends CredentialsSignin {
+  code = 'rate_limited'
+}
+
+class AdminConfigurationError extends CredentialsSignin {
+  code = 'configuration'
+}
+
+class AdminProtectionUnavailableError extends CredentialsSignin {
+  code = 'protection_unavailable'
 }
 
 const config = {
@@ -26,14 +42,41 @@ const config = {
           type: 'password',
         },
       },
-      async authorize(credentials) {
-        const adminPassword = getAdminPassword()
+      async authorize(credentials, request) {
+        let adminPassword: string
+        try {
+          adminPassword = getAdminPassword()
+        } catch (error) {
+          console.error('Admin authentication configuration is invalid:', error)
+          throw new AdminConfigurationError()
+        }
+
+        let reservation
+        try {
+          reservation = await reserveAdminLoginAttempt(request)
+        } catch (error) {
+          console.error('Admin login protection is unavailable:', error)
+          throw new AdminProtectionUnavailableError()
+        }
+
+        if (!reservation.allowed) {
+          console.warn(`Admin login rate limit reached; retry after ${reservation.retryAfterSeconds}s`)
+          throw new AdminRateLimitError()
+        }
+
         const password = typeof credentials?.password === 'string'
           ? credentials.password
           : ''
 
-        if (!comparePassword(password, adminPassword)) {
+        if (password.length > 256 || !await comparePassword(password, adminPassword)) {
           return null
+        }
+
+        try {
+          await clearAdminLoginAttempts(request)
+        } catch (error) {
+          console.error('Failed to clear admin login protection state:', error)
+          throw new AdminProtectionUnavailableError()
         }
 
         return {

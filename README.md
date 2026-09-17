@@ -132,8 +132,11 @@ pnpm dev
 创建 `.env.local` 文件并配置以下变量：
 
 ```env
-# 后台管理密码
+# 后台管理密码（生产环境必填，12–256 位；此处为占位值，部署前必须替换）
 ADMIN_PASSWORD=change-this-admin-password
+# 后台登录失败限流（可选，默认 15 分钟内最多 5 次）
+# ADMIN_LOGIN_MAX_ATTEMPTS=5
+# ADMIN_LOGIN_WINDOW_SECONDS=900
 
 # Upstash Redis/KV REST 配置
 KV_REST_API_URL=https://your-redis-instance.upstash.io
@@ -157,8 +160,9 @@ GA_ID=your-google-analytics-id
 
 1. 在 Upstash 创建 Redis 数据库。
 2. 复制数据库的 `REST URL` 和 `REST TOKEN` 到 `.env.local`。
-3. 设置一个强密码作为 `ADMIN_PASSWORD`。
-4. 首次读取数据时，如果 Redis 中没有对应数据，系统会使用项目内置 JSON 作为默认数据；后台保存后数据会写入 Redis。
+3. 设置一个 12–256 位、非默认值且不属于常见弱密码的 `ADMIN_PASSWORD`；生产环境配置不合规时后台登录会被阻止。
+4. Redis 同时用于后台登录失败限流；生产环境缺少或无法访问 Redis 时会拒绝后台认证，避免失去暴力破解防护。
+5. 首次读取数据时，如果 Redis 中没有对应数据，系统会使用项目内置 JSON 作为默认数据；后台保存后数据会写入 Redis。
 
 ## 📊 数据结构
 
@@ -396,8 +400,9 @@ NavSphere/
 ### 常见问题
 
 **认证失败**
-- 检查 `ADMIN_PASSWORD` 是否已配置且输入正确
+- 检查 `ADMIN_PASSWORD` 是否已配置为 12–256 位的非默认强密码；生产环境会阻止缺失、示例值和常见弱密码
 - 检查 `AUTH_SECRET` 是否已配置
+- 检查 Redis REST 配置是否可用；连续失败达到默认 5 次后需等待 15 分钟再试
 - 生产环境不要把 `NEXTAUTH_URL` 或 `AUTH_URL` 配成 `http://localhost:3000`；通常留空即可，如需固定域名请使用 `AUTH_URL=https://your-domain.com`
 
 **数据加载失败**

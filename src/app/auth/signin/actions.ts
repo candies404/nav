@@ -37,7 +37,14 @@ export async function authenticateAdmin(formData: FormData): Promise<AdminSignIn
     return { ok: true, callbackUrl }
   } catch (error) {
     if (error instanceof AuthError && error.type === 'CredentialsSignin') {
-      return { ok: false, error: '管理密码不正确' }
+      const code = 'code' in error && typeof error.code === 'string' ? error.code : 'credentials'
+      if (code === 'configuration') {
+        return { ok: false, error: '后台登录尚未安全配置，请先设置管理密码' }
+      }
+      if (code === 'protection_unavailable') {
+        return { ok: false, error: '登录保护服务暂时不可用，请稍后重试' }
+      }
+      return { ok: false, error: '登录失败，请检查凭据或稍后再试' }
     }
 
     console.error('Admin sign-in failed:', error)

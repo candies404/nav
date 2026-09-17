@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/registry/new-york/ui/button'
 import { Input } from '@/registry/new-york/ui/input'
 import { readAdminResponse, errorMessage } from '@/lib/admin-api-response'
-import { qualityLabels, siteEditHref, type LinkHealth, type QualityIssue, type QualityReport } from '@/lib/site-quality'
+import { qualityLabels, type LinkHealth, type QualityIssue, type QualityItem, type QualityReport } from '@/lib/site-quality'
+import { QualityEditDialog } from './quality-edit-dialog'
 
 export function ContentQualityClient({ initialReport }: { initialReport: QualityReport }) {
   const [report, setReport] = useState(initialReport)
@@ -15,6 +16,7 @@ export function ContentQualityClient({ initialReport }: { initialReport: Quality
   const [message, setMessage] = useState('')
   const [refreshing, setRefreshing] = useState(false)
   const [scan, setScan] = useState<{ completed: number; total: number } | null>(null)
+  const [editingItem, setEditingItem] = useState<QualityItem | null>(null)
   const stopped = useRef(false)
   const mounted = useRef(true)
   const scanning = useRef(false)
@@ -38,8 +40,20 @@ export function ContentQualityClient({ initialReport }: { initialReport: Quality
     try {
       const response = await fetch('/api/admin/content-quality')
       setReport(await readAdminResponse<QualityReport>(response, '刷新清单失败'))
-    } catch (cause) { setError(errorMessage(cause, '刷新清单失败')) }
+      return true
+    } catch (cause) {
+      setError(errorMessage(cause, '刷新清单失败'))
+      return false
+    }
     finally { setRefreshing(false) }
+  }
+
+  const handleEditSaved = async () => {
+    setEditingItem(null)
+    const refreshed = await refresh()
+    setMessage(refreshed
+      ? '站点已保存，待处理清单已刷新。'
+      : '站点已保存，但清单刷新失败；请稍后手动刷新。')
   }
 
   const checkLinks = async (ids: string[]) => {
@@ -122,7 +136,7 @@ export function ContentQualityClient({ initialReport }: { initialReport: Quality
           <td className="p-3"><div className="flex max-w-xs flex-wrap gap-1">{item.issues.map(issue => <span key={issue} className="rounded bg-muted px-2 py-1 text-xs">{qualityLabels[issue]}</span>)}</div><p className="mt-1 max-w-xs text-xs text-muted-foreground">{item.health?.reason}</p></td>
           <td className="whitespace-nowrap p-3 text-xs text-muted-foreground">{item.health ? <time dateTime={item.health.checkedAt}>{item.health.checkedAt.slice(0, 19).replace('T', ' ')} UTC</time> : '尚未检测'}</td>
           <td className="p-3"><div className="flex gap-2">
-            <Button variant="outline" size="sm" asChild><a href={siteEditHref(item)}>编辑</a></Button>
+            <Button variant="outline" size="sm" onClick={() => setEditingItem(item)}>编辑</Button>
             <Button variant="ghost" size="sm" disabled={Boolean(scan)} onClick={() => checkLinks([item.id])}>检测</Button>
           </div></td>
         </tr>)}</tbody>
@@ -133,5 +147,11 @@ export function ContentQualityClient({ initialReport }: { initialReport: Quality
       <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>上一页</Button>
       <Button variant="outline" size="sm" disabled={currentPage >= pages} onClick={() => setPage(currentPage + 1)}>下一页</Button>
     </div></div>
+    <QualityEditDialog
+      item={editingItem}
+      categories={report.categories}
+      onClose={() => setEditingItem(null)}
+      onSaved={handleEditSaved}
+    />
   </div>
 }

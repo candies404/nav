@@ -8,6 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { getAdminPasswordStatus } from '@/lib/auth-config'
 import { SignInForm } from './sign-in-form'
 
 type SignInPageProps = {
@@ -29,6 +30,7 @@ function getSafeCallbackUrl(value: string | string[] | undefined) {
 export default async function SignInPage({ searchParams }: SignInPageProps) {
   const params = await searchParams
   const queryCallbackUrl = getSafeCallbackUrl(params.callbackUrl)
+  const passwordStatus = getAdminPasswordStatus()
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-50 dark:bg-zinc-950">
@@ -120,6 +122,8 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
               <SignInForm
                 initialCallbackUrl={queryCallbackUrl || '/admin'}
                 restoreStoredCallbackUrl={!queryCallbackUrl}
+                configurationMessage={passwordStatus.message}
+                configurationBlocked={passwordStatus.blocked}
               />
               <CardFooter className="border-t border-slate-100 px-6 py-4 sm:px-8 dark:border-white/[0.06]">
                 <div className="flex items-start gap-2 text-xs leading-5 text-muted-foreground">

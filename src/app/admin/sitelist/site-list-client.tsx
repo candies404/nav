@@ -16,6 +16,7 @@ import {
   type SiteFormValues,
 } from '@/lib/site-draft'
 import { DuplicateSiteNotice } from '@/components/admin/duplicate-site-notice'
+import { SiteEditDialog } from '@/components/admin/site-edit-dialog'
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from "@/registry/new-york/ui/button"
 import { useToast } from "@/registry/new-york/hooks/use-toast"
@@ -68,6 +69,7 @@ import {
 
 import { NavigationSubItem } from '@/types/navigation'
 import { fileToDataUrl, uploadResourceImage } from '@/services/resource-api'
+import { getSiteFormValidationError, updateSiteFromForm } from '@/services/navigation-site-api'
 
 interface SubCategory {
   id: string
@@ -220,8 +222,6 @@ export function SiteListClient({
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [draftPrompt, setDraftPrompt] = useState<DraftPrompt | null>(null)
   const [editingSite, setEditingSite] = useState<Site | null>(null)
-  const editingSiteIdRef = useRef(editingSite?.id)
-  editingSiteIdRef.current = editingSite?.id
   const openedEditId = useRef('')
   const editBaselineRef = useRef<SiteFormValues>(createEmptySiteForm())
   const restoredDraftRef = useRef(false)
@@ -250,7 +250,6 @@ export function SiteListClient({
   const [showDeleteSiteDialog, setShowDeleteSiteDialog] = useState(false)
   const [deletingSite, setDeletingSite] = useState<Site | null>(null)
   const [isUploadingAddIcon, setIsUploadingAddIcon] = useState(false)
-  const [isUploadingEditIcon, setIsUploadingEditIcon] = useState(false)
   const [isBatchDeleting, setIsBatchDeleting] = useState(false)
   const [batchOperation, setBatchOperation] = useState<BatchOperation>(null)
   const [showBatchMoveDialog, setShowBatchMoveDialog] = useState(false)
@@ -266,7 +265,6 @@ export function SiteListClient({
   const editMetadata = useSiteMetadata(editSite, setEditSite, showEditDialog && !isEditingSubmitting, editingSite?.url)
   const resetEditMetadata = editMetadata.reset
   const isFetchingAddMetadata = addMetadata.loading
-  const isFetchingEditMetadata = editMetadata.loading
   const [addError, setAddError] = useState('')
   const [editError, setEditError] = useState('')
   const addHasChanges = useMemo(
@@ -858,9 +856,16 @@ export function SiteListClient({
       return
     }
 
-    if (!editSite.name.trim() || !editSite.url.trim() || !editSite.categoryId || !editingSite) {
-      const missing = [!editSite.name.trim() && '站点名称', !editSite.url.trim() && '站点链接', !editSite.categoryId && '所属分类'].filter(Boolean)
-      const message = !editingSite ? '站点已不存在，请刷新列表' : `请填写${missing.join('、')}`
+    if (!editingSite) {
+      const message = '站点已不存在，请刷新列表'
+      setEditError(message)
+      toast({ title: '错误', description: message, variant: 'destructive' })
+      return
+    }
+
+    const validationError = getSiteFormValidationError(editSite)
+    if (validationError) {
+      const message = validationError
       setEditError(message)
       toast({
         title: "错误",
@@ -873,25 +878,7 @@ export function SiteListClient({
     setEditError('')
     setIsEditingSubmitting(true)
     try {
-      const response = await fetch(`/api/navigation/sites/${encodeURIComponent(editingSite.id)}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          title: editSite.name,
-          href: editSite.url,
-          aliases: parseSiteAliases(editSite.aliases),
-          description: editSite.description,
-          icon: editSite.icon,
-          enabled: editSite.enabled,
-          isPrivate: editSite.isPrivate,
-          targetCategoryId: editSite.categoryId,
-          targetSubCategoryId: editSite.subCategoryId || null,
-        }),
-      })
-
-      await readMutationResponse<{ item: NavigationSubItem }>(response, '更新站点失败')
+      await updateSiteFromForm(editingSite.id, editSite)
 
       await fetchSites()
 
@@ -1125,25 +1112,20 @@ export function SiteListClient({
   )
 
   const isValidUrl = isHttpUrl
-  const fetchWebsiteMetadata = (url: string, isEdit = false) =>
-    (isEdit ? editMetadata : addMetadata).fetchMetadata(url)
+  const fetchWebsiteMetadata = (url: string) => addMetadata.fetchMetadata(url)
 
-  const handleIconUpload = async (file: File, isEdit: boolean = false) => {
-    const setUploading = isEdit ? setIsUploadingEditIcon : setIsUploadingAddIcon
-    const setSite = isEdit ? setEditSite : setNewSite
-    const site = isEdit ? editSite : newSite
-    const formId = editingSite?.id
-    const uploadedUrl = site.url
-    const initialIcon = site.icon
-    ;(isEdit ? editMetadata : addMetadata).markEdited('icon')
+  const handleIconUpload = async (file: File) => {
+    const uploadedUrl = newSite.url
+    const initialIcon = newSite.icon
+    addMetadata.markEdited('icon')
 
     try {
-      setUploading(true)
+      setIsUploadingAddIcon(true)
 
       const data = await uploadResourceImage(await fileToDataUrl(file))
 
       if (data.imageUrl) {
-        setSite(current => current.url === uploadedUrl && current.icon === initialIcon && (!isEdit || editingSiteIdRef.current === formId)
+        setNewSite(current => current.url === uploadedUrl && current.icon === initialIcon
           ? { ...current, icon: data.imageUrl! } : current)
         toast({
           title: "成功",
@@ -1161,7 +1143,7 @@ export function SiteListClient({
         variant: "destructive"
       })
     } finally {
-      setUploading(false)
+      setIsUploadingAddIcon(false)
     }
   }
 
@@ -1441,7 +1423,7 @@ export function SiteListClient({
                         size="sm"
                         disabled={!newSite.url || !isValidUrl(newSite.url) || isFetchingAddMetadata || isAddingSubmitting}
                         aria-label={isFetchingAddMetadata ? '正在获取网站信息' : '重新获取网站信息'}
-                        onClick={() => fetchWebsiteMetadata(newSite.url, false)}
+                        onClick={() => fetchWebsiteMetadata(newSite.url)}
                       >
                         {isFetchingAddMetadata ? (
                           <Icons.loader2 className="h-4 w-4 animate-spin" />
@@ -1531,7 +1513,7 @@ export function SiteListClient({
                           onChange={async (e) => {
                             const file = e.target.files?.[0]
                             if (file) {
-                              await handleIconUpload(file, false)
+                              await handleIconUpload(file)
                               // 清空文件输入
                               const fileInput = document.getElementById('add-icon-upload') as HTMLInputElement
                               if (fileInput) {
@@ -1842,246 +1824,19 @@ export function SiteListClient({
               </DialogContent>
             </Dialog>
 
-            {/* 编辑站点对话框 */}
-            <Dialog open={showEditDialog} onOpenChange={(open) => {
-              if (open) setShowEditDialog(true)
-              else closeEditDialog()
-            }}>
-              <DialogContent className="sm:max-w-[425px]" data-preserve-form="true">
-                <DialogHeader>
-                  <DialogTitle>编辑站点</DialogTitle>
-                </DialogHeader>
-                <FormSaveError message={editError || editMetadata.error} />
-                <DuplicateSiteNotice url={editSite.url} enabled={showEditDialog} excludeId={editingSite?.id} />
-                <div className="grid gap-4 py-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="edit-url">站点链接 *</Label>
-                    <div className="flex items-center space-x-2">
-                      <div className="relative flex-1">
-                        <Input
-                          id="edit-url"
-                          value={editSite.url}
-                          onChange={(e) => setEditSite({ ...editSite, url: e.target.value })}
-                          placeholder="输入网站链接，将自动获取网站信息"
-                          disabled={isEditingSubmitting}
-                        />
-                        {isFetchingEditMetadata && (
-                          <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                            <Icons.loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                          </div>
-                        )}
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={!editSite.url || !isValidUrl(editSite.url) || isFetchingEditMetadata || isEditingSubmitting}
-                        aria-label={isFetchingEditMetadata ? '正在获取网站信息' : '重新获取网站信息'}
-                        onClick={() => fetchWebsiteMetadata(editSite.url, true)}
-                      >
-                        {isFetchingEditMetadata ? (
-                          <Icons.loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Icons.refresh className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      自动补充标题、描述和图标；手动修改过的字段会保留
-                    </div>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="edit-name">站点名称 *</Label>
-                    <Input
-                      id="edit-name"
-                      value={editSite.name}
-                      onChange={(e) => { editMetadata.markEdited('name'); setEditSite(current => ({ ...current, name: e.target.value })) }}
-                      placeholder="站点名称（可自动获取）"
-                      disabled={isEditingSubmitting}
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="edit-aliases">搜索别名</Label>
-                    <Input
-                      id="edit-aliases"
-                      value={editSite.aliases}
-                      onChange={(event) => setEditSite(current => ({ ...current, aliases: event.target.value }))}
-                      placeholder="多个别名用逗号分隔"
-                      disabled={isEditingSubmitting}
-                    />
-                    <p className="text-xs text-muted-foreground">用于首页搜索，不会显示在导航卡片上</p>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="edit-icon">站点图标</Label>
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                      <div className="flex-1 relative">
-                        <Input
-                          id="edit-icon"
-                          value={editSite.icon}
-                          onChange={(e) => { editMetadata.markEdited('icon'); setEditSite(current => ({ ...current, icon: e.target.value })) }}
-                          placeholder="图标URL（可自动获取）"
-                          disabled={isEditingSubmitting}
-                        />
-                        {editSite.icon && (
-                          <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                            <Image
-                              src={editSite.icon}
-                              alt="图标预览"
-                              width={16}
-                              height={16}
-                              unoptimized
-                              className="w-4 h-4 object-contain"
-                              onError={(e) => {
-                                const target = e.target as HTMLImageElement
-                                target.style.display = 'none'
-                              }}
-                            />
-                          </div>
-                        )}
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="relative"
-                        disabled={isEditingSubmitting || isUploadingEditIcon}
-                        onClick={() => {
-                          const fileInput = document.getElementById('edit-icon-upload')
-                          fileInput?.click()
-                        }}
-                      >
-                        {isUploadingEditIcon ? (
-                          <>
-                            <Icons.loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            上传中...
-                          </>
-                        ) : (
-                          <>
-                            <Icons.upload className="mr-2 h-4 w-4" />
-                            上传图片
-                          </>
-                        )}
-                        <input
-                          id="edit-icon-upload"
-                          type="file"
-                          accept="image/*"
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0]
-                            if (file) {
-                              await handleIconUpload(file, true)
-                              // 清空文件输入
-                              const fileInput = document.getElementById('edit-icon-upload') as HTMLInputElement
-                              if (fileInput) {
-                                fileInput.value = ''
-                              }
-                            }
-                          }}
-                          className="hidden"
-                        />
-                      </Button>
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      输入站点链接后会自动获取并回填图标，也可手动输入 URL 或上传本地图片
-                    </div>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="edit-category">分类 *</Label>
-                    <Select
-                      value={editSite.categoryId}
-                      onValueChange={(value) => {
-                        setEditSite({ ...editSite, categoryId: value, subCategoryId: '' })
-                      }}
-                      disabled={isEditingSubmitting}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="选择分类" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {navigationData.map((category) => (
-                          <SelectItem key={category.id} value={category.id}>
-                            {category.title}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {editSite.categoryId && navigationData.find(cat => cat.id === editSite.categoryId)?.subCategories && (
-                    <div className="grid gap-2">
-                      <Label htmlFor="edit-subcategory">子分类</Label>
-                      <Select
-                        value={editSite.subCategoryId || "none"}
-                        onValueChange={(value) => setEditSite({ ...editSite, subCategoryId: value === "none" ? "" : value })}
-                        disabled={isEditingSubmitting}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="选择子分类（可选）" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">无子分类</SelectItem>
-                          {navigationData
-                            .find(cat => cat.id === editSite.categoryId)
-                            ?.subCategories?.map((subCategory) => (
-                              <SelectItem key={subCategory.id} value={subCategory.id}>
-                                {subCategory.title}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                  <div className="grid gap-2">
-                    <Label htmlFor="edit-description">描述</Label>
-                    <Textarea
-                      id="edit-description"
-                      value={editSite.description}
-                      onChange={(e) => { editMetadata.markEdited('description'); setEditSite(current => ({ ...current, description: e.target.value })) }}
-                      placeholder="输入站点描述（可选）"
-                      className="resize-none"
-                      disabled={isEditingSubmitting}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between rounded-lg border p-3">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="edit-is-enabled">是否启用</Label>
-                      <p className="text-xs text-muted-foreground">关闭后前台不会展示该站点</p>
-                    </div>
-                    <Switch
-                      id="edit-is-enabled"
-                      checked={editSite.enabled}
-                      onCheckedChange={(checked) => setEditSite({ ...editSite, enabled: checked })}
-                      disabled={isEditingSubmitting}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between rounded-lg border p-3">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="edit-is-private">是否私密</Label>
-                      <p className="text-xs text-muted-foreground">开启后仅后台登录用户可见</p>
-                    </div>
-                    <Switch
-                      id="edit-is-private"
-                      checked={editSite.isPrivate}
-                      onCheckedChange={(checked) => setEditSite({ ...editSite, isPrivate: checked })}
-                      disabled={isEditingSubmitting}
-                    />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={closeEditDialog}
-                    disabled={isEditingSubmitting}
-                  >
-                    取消
-                  </Button>
-                  <Button onClick={handleEditSite} disabled={isEditingSubmitting}>
-                    {isEditingSubmitting && (
-                      <Icons.loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    )}
-                    {isEditingSubmitting ? "更新中..." : "更新站点"}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+            <SiteEditDialog
+              open={showEditDialog}
+              values={editSite}
+              setValues={setEditSite}
+              siteId={editingSite?.id}
+              categories={navigationData}
+              metadata={editMetadata}
+              error={editError}
+              submitting={isEditingSubmitting}
+              callbackUrl="/admin/sitelist"
+              onClose={closeEditDialog}
+              onSubmit={handleEditSite}
+            />
           </div>
         </div>
 
