@@ -9,6 +9,7 @@ import type { NavigationSearchIndexItem } from '@/types/navigation'
 import type { SiteConfig } from '@/types/site'
 import { getNavigationItemElementId } from '@/lib/navigation-anchor'
 import { getNavigationHostname } from '@/lib/navigation-search'
+import { recordRecentVisit } from '@/lib/recent-visits'
 
 interface SearchBarProps {
   onSearch: (query: string) => void
@@ -263,6 +264,7 @@ export function SearchBar({
   const openItem = (item: NavigationSearchIndexItem) => {
     if (!item.href) return
     const linkTarget = siteConfig?.navigation?.linkTarget || '_blank'
+    recordRecentVisit(item.id)
     onSearch('')
     closeResults()
     if (linkTarget === '_self') {

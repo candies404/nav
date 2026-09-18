@@ -7,11 +7,19 @@ import type { NavigationData, NavigationSearchIndex } from '@/types/navigation'
 import type { SiteConfig } from '@/types/site'
 import { Sidebar } from '@/components/sidebar'
 import { SearchBar } from '@/components/search-bar'
+import { RecentVisits } from '@/components/recent-visits'
 import { ModeToggle } from '@/components/mode-toggle'
 import { Button } from '@/registry/new-york/ui/button'
 import { Sheet, SheetContent, SheetTitle, SheetDescription, SheetTrigger } from '@/registry/new-york/ui/sheet'
 import { useNavigationSidebar } from '@/components/use-navigation-sidebar'
 import { searchNavigationItems } from '@/lib/navigation-search'
+import {
+  clearRecentVisits,
+  readRecentVisitIds,
+  recordRecentVisit,
+  RECENT_VISITS_STORAGE_KEY,
+  RECENT_VISITS_UPDATED_EVENT,
+} from '@/lib/recent-visits'
 
 interface NavigationShellProps {
   navigationOutline: NavigationData
@@ -31,6 +39,7 @@ export function NavigationShell({
   const [searchData, setSearchData] = useState<NavigationSearchIndex | null>(null)
   const [isSearchLoading, setIsSearchLoading] = useState(false)
   const [searchError, setSearchError] = useState(false)
+  const [recentVisitIds, setRecentVisitIds] = useState<string[]>([])
   const searchRequestRef = useRef<Promise<void> | null>(null)
   const { activeId, expandedCategories, toggleCategory } = useNavigationSidebar(navigationOutline)
 
@@ -39,6 +48,33 @@ export function NavigationShell({
     const closeOnDesktop = () => { if (desktop.matches) setIsSidebarOpen(false) }
     desktop.addEventListener('change', closeOnDesktop)
     return () => desktop.removeEventListener('change', closeOnDesktop)
+  }, [])
+
+  useEffect(() => {
+    const syncRecentVisits = () => setRecentVisitIds(readRecentVisitIds())
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === null || event.key === RECENT_VISITS_STORAGE_KEY) syncRecentVisits()
+    }
+    const recordVisitFromLink = (event: MouseEvent) => {
+      if (event.type === 'auxclick' && event.button !== 1) return
+      const target = event.target instanceof Element ? event.target : null
+      const link = target?.closest<HTMLAnchorElement>('a[data-navigation-site-id]')
+      const itemId = link?.dataset.navigationSiteId
+      if (itemId) recordRecentVisit(itemId)
+    }
+
+    syncRecentVisits()
+    window.addEventListener(RECENT_VISITS_UPDATED_EVENT, syncRecentVisits)
+    window.addEventListener('storage', handleStorage)
+    document.addEventListener('click', recordVisitFromLink, true)
+    document.addEventListener('auxclick', recordVisitFromLink, true)
+
+    return () => {
+      window.removeEventListener(RECENT_VISITS_UPDATED_EVENT, syncRecentVisits)
+      window.removeEventListener('storage', handleStorage)
+      document.removeEventListener('click', recordVisitFromLink, true)
+      document.removeEventListener('auxclick', recordVisitFromLink, true)
+    }
   }, [])
 
   const loadSearchData = useCallback(() => {
@@ -67,6 +103,10 @@ export function NavigationShell({
 
     searchRequestRef.current = request
   }, [searchData, searchRevision])
+
+  useEffect(() => {
+    if (recentVisitIds.length > 0) loadSearchData()
+  }, [loadSearchData, recentVisitIds.length])
 
   const searchResults = useMemo(() => {
     if (!searchData) return []
@@ -135,6 +175,12 @@ export function NavigationShell({
           </div>
         </div>
 
+        <RecentVisits
+          itemIds={recentVisitIds}
+          items={searchData?.items || []}
+          siteConfig={siteData}
+          onClear={clearRecentVisits}
+        />
         {children}
       </main>
     </div>
